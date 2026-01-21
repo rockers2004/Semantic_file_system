@@ -1,0 +1,30 @@
+# Local LSFS Configuration
+
+# Directories
+directories:
+  root_dir: "C:/Users/Taslim/OneDrive/Desktop/lsfs-test"
+  vector_db_dir: "./.lsfs_db"
+
+# LLM Settings
+ollama:
+  model: "llama3.2:3b" # Change to your preferred model
+  url: "http://localhost:11434"
+
+# Embedding Settings
+embedding:
+  model: "all-MiniLM-L6-v2" # Lightweight and fast
+
+# Search Settings
+search:
+  default_results: 5
+  max_file_size_mb: 10
+
+# Performance
+performance:
+  enable_caching: true
+
+# Features (DISABLED - No Redis needed)
+features:
+  enable_versioning: false
+  enable_redis: false
+  enable_rollback: false
