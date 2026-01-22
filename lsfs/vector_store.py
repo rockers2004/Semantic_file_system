@@ -52,67 +52,85 @@ class VectorStore:
         except Exception as e:
             return f"[Error reading file: {str(e)}]"
     
-    def index_file(self, file_path: str, root_dir: str) -> bool:
-        """Index a single file"""
+    def index_file(self, file_path: str, root_dir: str) -> str:
+        """Index a single file. Returns 'indexed', 'unchanged', or 'error'."""
         try:
+            file_id = self._generate_file_id(file_path)
+            current_size = os.path.getsize(file_path)
+            current_mtime = os.path.getmtime(file_path)
+
+            # Check if already indexed and unchanged
+            try:
+                existing = self.collection.get(ids=[file_id], include=["metadatas"])
+                if existing and existing.get("ids") and existing["ids"][0]:
+                    meta = existing.get("metadatas", [[]])[0][0] if existing.get("metadatas") else {}
+                    stored_size = int(meta.get("size_bytes", -1)) if meta else -1
+                    stored_mtime = float(meta.get("modified_ts", -1)) if meta else -1
+                    if stored_size == current_size and abs(stored_mtime - current_mtime) < 1e-6:
+                        return "unchanged"
+            except Exception:
+                # If lookup fails, fall through to reindex
+                pass
+
             # Read content
             content = self._read_file_content(file_path)
-            if not content or content. startswith("[Error"):
-                return False
+            if not content or content.startswith("[Error"):
+                return "error"
             
             # Generate embedding
             embedding = self.embedding_model.encode(content).tolist()
             
             # Prepare metadata
-            file_id = self._generate_file_id(file_path)
             relative_path = os.path.relpath(file_path, root_dir)
-            
             metadata = {
                 "file_path": file_path,
                 "relative_path": relative_path,
                 "file_name": os.path.basename(file_path),
                 "file_type": mimetypes.guess_type(file_path)[0] or "unknown",
                 "indexed_at": datetime.now().isoformat(),
-                "size_bytes": str(os.path.getsize(file_path))
+                "size_bytes": current_size,
+                "modified_ts": current_mtime,
             }
             
             # Add to ChromaDB
-            self.collection. upsert(
+            self.collection.upsert(
                 ids=[file_id],
                 embeddings=[embedding],
-                documents=[content[: 1000]],  # Store first 1000 chars as preview
+                documents=[content[:1000]],  # Store first 1000 chars as preview
                 metadatas=[metadata]
             )
             
-            return True
+            return "indexed"
         
         except Exception as e: 
             print(f"❌ Error indexing {file_path}: {e}")
-            return False
+            return "error"
     
     def index_directory(self, directory:  str) -> Dict[str, int]:
-        """Index all files in directory"""
-        stats = {"indexed": 0, "skipped": 0, "errors": 0}
+        """Index all files in directory (skip unchanged)."""
+        stats = {"indexed": 0, "unchanged": 0, "errors": 0}
         
         print(f"📂 Indexing directory: {directory}")
         
-        for root, dirs, files in os. walk(directory):
+        for root, dirs, files in os.walk(directory):
             # Skip hidden directories and vector DB
-            dirs[:] = [d for d in dirs if not d. startswith('.')]
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
             
             for file in files:
                 if file.startswith('.'):
                     continue
                 
                 file_path = os.path.join(root, file)
-                
-                if self.index_file(file_path, directory):
+                status = self.index_file(file_path, directory)
+                if status == "indexed":
                     stats["indexed"] += 1
                     print(f"  ✓ {os.path.relpath(file_path, directory)}")
+                elif status == "unchanged":
+                    stats["unchanged"] += 1
                 else:
-                    stats["skipped"] += 1
+                    stats["errors"] += 1
         
-        print(f"\n📊 Indexed:  {stats['indexed']} | Skipped: {stats['skipped']}")
+        print(f"\n📊 Indexed: {stats['indexed']} | Unchanged: {stats['unchanged']} | Errors: {stats['errors']}")
         return stats
     
     def search(self, query: str, k: int = 5, keywords: Optional[str] = None) -> List[Dict[str, Any]]:

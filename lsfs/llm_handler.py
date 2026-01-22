@@ -2,6 +2,23 @@ import requests
 import json
 from typing import List, Dict, Any, Optional
 
+
+def _extract_first_json_block(text: str) -> Optional[str]:
+    """Extract the first balanced JSON object from text."""
+    start = text.find('{')
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        ch = text[i]
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
 class OllamaHandler: 
     """Handles interaction with local Ollama LLM"""
     
@@ -100,18 +117,17 @@ User: "delete old_file.txt"
             
             if response.status_code == 200:
                 result = response.json()
-                content = result['message']['content']. strip()
+                content = result['message']['content'].strip()
                 
-                # Extract JSON from response
-                json_start = content.find('{')
-                json_end = content.rfind('}') + 1
-                
-                if json_start != -1 and json_end > json_start:
-                    json_str = content[json_start:json_end]
-                    parsed = json.loads(json_str)
-                    return parsed
+                # Extract JSON from response robustly
+                json_str = _extract_first_json_block(content)
+                if json_str:
+                    try:
+                        return json.loads(json_str)
+                    except json.JSONDecodeError as e:
+                        return {"operation": "error", "parameters": {"message": f"Parse error: {e}"}, "confidence": 0.0}
                 else:
-                    return {"operation": "unknown", "parameters": {}, "confidence": 0.0}
+                    return {"operation": "error", "parameters": {"message": "No JSON found in LLM response"}, "confidence": 0.0}
             
             return {"operation": "error", "parameters": {"message": "LLM request failed"}, "confidence": 0.0}
         
