@@ -129,43 +129,34 @@ class LSFSTerminal:
         
         self.console.print(table)
         self.console.print()
+
+    def _detect_result_type(self, result: dict) -> str:
         """Detect what type of operation result this is"""
-        if 'results' in result and 'query' in result: 
+        if not isinstance(result, dict):
+            return 'generic'
+        if 'results' in result and 'query' in result:
             return 'search'
-        elif 'content' in result and 'file_name' in result:
+        if 'content' in result and 'file_name' in result:
             return 'read'
-        elif 'files' in result and 'directories' in result:
+        if 'files' in result and 'directories' in result:
             return 'list'
-        elif 'stats' in result:
+        if 'stats' in result:
             return 'stats'
         return 'generic'
-    
-    def _display_search_results(self, result: dict):
-        """Display semantic search results"""
-        results = result.get('results', [])
-        query = result.get('query', '')
-        
-        if not results: 
-            self.console.print(f"🔍 No files found matching:  '{query}'\n", style="yellow")
-            return
-        
-        self.console.print(f"\n🔍 Search Results for:  '{query}' ({len(results)} files)\n", style="cyan bold")
-        
-        table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-        table.add_column("📁 File", style="cyan", width=30)
-        table.add_column("📊 Score", justify="right", style="green", width=10)
-        table.add_column("📝 Preview", style="white", width=50)
-        
-        for i, item in enumerate(results, 1):
-            score = f"{item. get('score', 0):.2%}"
-            preview = item.get('preview', '')[:100] + "..." if len(item.get('preview', '')) > 100 else item.get('preview', '')
-            table.add_row(
-                item.get('relative_path', 'Unknown'),
-                score,
-                preview
-            )
-        
-        self.console.print(table)
+
+    def display_result(self, result: dict):
+        """Route result to the right renderer"""
+        kind = self._detect_result_type(result)
+        if kind == 'search':
+            self._display_search_results(result)
+        elif kind == 'read':
+            self._display_file_content(result)
+        elif kind == 'list':
+            self._display_file_list(result)
+        elif kind == 'stats':
+            self._display_stats(result)
+        else:
+            self.console.print(result)
         self.console.print()
     
     def _display_file_content(self, result:  dict):

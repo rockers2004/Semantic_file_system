@@ -12,7 +12,7 @@ class LSFSConfig:
     vector_db_dir: str = "./.lsfs_db"
     
     # Ollama settings
-    ollama_model: str = "llama3.2:3b"  # Your 3B model
+    ollama_model: str = "tinyllama:latest"  # Your 3B model
     ollama_url: str = "http://localhost:11434"
     
     # Embedding model (lightweight)
