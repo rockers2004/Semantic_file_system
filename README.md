@@ -25,7 +25,7 @@ Before you start, ensure you have:
 
 - **Python 3.8+** installed
 - **Ollama** installed and running locally ([Download here](https://ollama.ai))
-- A local LLM model (e.g., `tinyllama:latest` or your preferred model)
+- A local LLM model (e.g., `qwen2.5:0.5b-instruct` or your preferred model)
 
 ### Check Ollama Setup
 
@@ -34,7 +34,7 @@ Before you start, ensure you have:
 ollama serve
 
 # In another terminal, pull a model (if not already done)
-ollama pull tinyllama:latest
+ollama pull qwen2.5:0.5b-instruct
 ```
 
 ## Installation
@@ -86,7 +86,7 @@ vector_db_dir: "./.lsfs_db"
 
 # LLM Settings
 ollama:
-  model: "tinyllama:latest"        # Change to your preferred model
+  model: "qwen2.5:0.5b-instruct"        # Change to your preferred model
   url: "http://localhost:11434"    # Ollama server address
 
 # Embedding model (lightweight, ~80MB)

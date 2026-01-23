@@ -7,7 +7,7 @@ directories:
 
 # LLM Settings
 ollama:
-  model: "tinyllama:latest" # Change to your preferred model
+  model: "qwen2.5:0.5b-instruct" # Change to your preferred model
   url: "http://localhost:11434"
 
 # Embedding Settings
