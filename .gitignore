@@ -12,6 +12,7 @@ dist/
 .venv/
 env/
 venv/
+myenv/
 
 # Chroma / vector store cache
 .lsfs_db/

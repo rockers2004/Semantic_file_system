@@ -2,17 +2,17 @@
 
 # Directories
 directories:
-  root_dir: "C:/Users/Taslim/OneDrive/Desktop/lsfs-test"
+  root_dir: "C:/Users/Omsai/Desktop/lsfs_test"
   vector_db_dir: "./.lsfs_db"
 
 # LLM Settings
 ollama:
-  model: "qwen2.5:0.5b-instruct" # Change to your preferred model
+  model: "qwen3:14b" # Change to your preferred model
   url: "http://localhost:11434"
 
 # Embedding Settings
 embedding:
-  model: "all-MiniLM-L6-v2" # Lightweight and fast
+  model: "all-mpnet-base-v2" # Lightweight and fast
 
 # Search Settings
 search:
