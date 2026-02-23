@@ -2,12 +2,12 @@
 
 # Directories
 directories:
-  root_dir: "C:/Users/Omsai/Desktop/lsfs_test"
+  root_dir: "/Users/ssgmcollege/Desktop/lsfs_test"
   vector_db_dir: "./.lsfs_db"
 
 # LLM Settings
 ollama:
-  model: "qwen3:14b" # Change to your preferred model
+  model: "mistral:7b-instruct" # Change to your preferred model
   url: "http://localhost:11434"
 
 # Embedding Settings

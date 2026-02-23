@@ -63,6 +63,7 @@ Available operations:
 - copy: Copy a file (params: source, destination)
 - reindex: Re-index all files (no params)
 - stats: Show system statistics (no params)
+- categorize: Group and display files by type (no params)
 
 Return ONLY valid JSON in this format:
 {
@@ -86,6 +87,9 @@ User: "search for files about machine learning"
 
 User: "show me all files"
 {"operation":  "list", "parameters": {}, "confidence": 0.95}
+
+User: "categorize the files"
+{"operation": "categorize", "parameters": {}, "confidence": 0.9}
 
 User: "move report.txt to documents/report.txt"
 {"operation": "move", "parameters": {"source":  "report.txt", "destination":  "documents/report.txt"}, "confidence": 0.9}

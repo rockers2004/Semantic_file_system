@@ -15,6 +15,7 @@ from rich. table import Table
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
+from rich.tree import Tree
 from rich import box
 
 # Add lsfs to path
@@ -76,6 +77,7 @@ class LSFSTerminal:
 ## Directory Operations
 • **Create directory**: "create a folder called documents"
 • **List files**: "list all files" or "show files in documents"
+• **Categorize files**: "categorize files" or "group files by type"
 
 ## Semantic Search (The Magic!  ✨)
 • **Search by content**: "search for files about machine learning"
@@ -140,6 +142,8 @@ class LSFSTerminal:
             return 'read'
         if 'files' in result and 'directories' in result:
             return 'list'
+        if 'categorized' in result:
+            return 'categorize'
         if 'stats' in result:
             return 'stats'
         return 'generic'
@@ -153,6 +157,8 @@ class LSFSTerminal:
             self._display_file_content(result)
         elif kind == 'list':
             self._display_file_list(result)
+        elif kind == 'categorize':
+            self._display_categorized_tree(result)
         elif kind == 'stats':
             self._display_stats(result)
         else:
@@ -231,6 +237,30 @@ class LSFSTerminal:
         else:
             total = result.get('total', 0)
             self.console.print(f"\nTotal:  {total} items\n", style="green")
+            
+    def _display_categorized_tree(self, result: dict):
+        """Display categorized files in a tree structure"""
+        categorized_data = result.get('categorized', {})
+        
+        self.console.print("\n📂 Categorized Files by Type\n", style="cyan bold")
+        
+        if not categorized_data:
+            self.console.print("📭 No files found to categorize.\n", style="yellow")
+            return
+            
+        tree = Tree(f"📁 {os.path.basename(self.config.root_dir)}", guide_style="blue")
+        
+        for category, files in categorized_data.items():
+            category_node = tree.add(f"[bold magenta]{category}[/bold magenta] ({len(files)})")
+            
+            for file in files:
+                rel_path = file
+                abs_path = os.path.abspath(os.path.join(self.config.root_dir, rel_path))
+                link = f"[link=file:///{abs_path.replace(os.sep, '/')}]{rel_path}[/link]"
+                category_node.add(f"📄 {link}")
+                
+        self.console.print(tree)
+        self.console.print(f"\n✅ {result.get('message', '')}\n", style="green")
     
     def _display_stats(self, result: dict):
         """Display system statistics"""

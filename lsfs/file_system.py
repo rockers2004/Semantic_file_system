@@ -267,6 +267,50 @@ class LocalLSFS:
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+            
+    def categorize_files(self) -> Dict[str, Any]:
+        """Categorize all indexed files based on file extension"""
+        try:
+            categories = {
+                "Images": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp"],
+                "Documents": [".pdf", ".doc", ".docx", ".txt", ".md", ".csv", ".xlsx", ".rtf"],
+                "Code": [".py", ".js", ".html", ".css", ".java", ".cpp", ".c", ".go", ".rs", ".ts", ".jsx", ".tsx", ".sh", ".yaml", ".yml", ".json", ".xml"],
+                "Audio": [".mp3", ".wav", ".ogg", ".flac", ".aac"],
+                "Video": [".mp4", ".mkv", ".avi", ".mov", ".wmv"],
+                "Archives": [".zip", ".tar", ".gz", ".rar", ".7z"],
+                "Others": []
+            }
+            
+            categorized_data = {category: [] for category in categories}
+            
+            # Fetch all files from root directory
+            for root, _, files in os.walk(self.root_dir):
+                for file in files:
+                    if file.startswith('.'):
+                        continue
+                        
+                    ext = os.path.splitext(file)[1].lower()
+                    
+                    found_category = False
+                    for category, extensions in categories.items():
+                        if ext in extensions:
+                            categorized_data[category].append(file)
+                            found_category = True
+                            break
+                            
+                    if not found_category:
+                        categorized_data["Others"].append(file)
+                        
+            # Remove empty categories
+            categorized_data = {k: v for k, v in categorized_data.items() if v}
+            
+            return {
+                "success": True,
+                "categorized": categorized_data,
+                "message": f"Categorized {sum(len(v) for v in categorized_data.values())} files into {len(categorized_data)} categories"
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
     
     def get_stats(self) -> Dict[str, Any]:
         """Get file system statistics"""
@@ -367,7 +411,8 @@ class LocalLSFS:
                 params.get('destination')
             ),
             'reindex': lambda: self.reindex_all(),
-            'stats': lambda: {"success": True, "stats": self.get_stats()}
+            'stats': lambda: {"success": True, "stats": self.get_stats()},
+            'categorize': lambda: self.categorize_files()
         }
         
         if operation in operations:
