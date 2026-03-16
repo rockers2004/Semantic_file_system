@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Local LSFS Terminal Interface
+Local SLPFS Terminal Interface
 A natural language file system powered by local LLMs
 """
 
@@ -31,7 +31,7 @@ except ImportError:
     USE_YAML = False
 
 class LSFSTerminal:
-    """Interactive terminal for LSFS"""
+    """Interactive terminal for SLPFS"""
     
     def __init__(self, config: LSFSConfig):
         self.console = Console()
@@ -50,10 +50,10 @@ class LSFSTerminal:
         banner = """
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║        🌟 Local LSFS - LLM Semantic File System 🌟       ║
+║ 🌟 Local SLPFS - Semantic Layered Powered file system 🌟 ║
 ║                                                           ║
-║        Talk to your files in natural language            ║
-║        Powered by Ollama + ChromaDB                      ║
+║        Talk to your files in natural language             ║
+║        Powered by Ollama + ChromaDB                       ║
 ║        Version Control:  DISABLED (No Redis needed)       ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
@@ -63,7 +63,7 @@ class LSFSTerminal:
     def display_help(self):
         """Display help information"""
         help_text = """
-# 📚 LSFS Commands & Examples
+# 📚 SLPFS Commands & Examples
 
 ## File Operations
 • **Create file**:  "create a file called notes.txt"
@@ -87,7 +87,7 @@ class LSFSTerminal:
 • **Reindex**: "reindex all files" - Rebuild search index
 • **Help**: "help" - Show this message
 • **Clear**: "clear" - Clear screen
-• **Exit**: "exit" or "quit" - Exit LSFS
+• **Exit**: "exit" or "quit" - Exit SLPFS
 
 ## Tips
 💡 Just type naturally! The LLM understands your intent.
@@ -236,7 +236,7 @@ class LSFSTerminal:
         """Display system statistics"""
         stats = result.get('stats', {})
         
-        self. console.print("\n📊 LSFS Statistics\n", style="cyan bold")
+        self. console.print("\n📊 SLPFS Statistics\n", style="cyan bold")
         
         table = Table(show_header=False, box=box.ROUNDED)
         table.add_column("Property", style="cyan bold")
@@ -257,16 +257,16 @@ class LSFSTerminal:
     def get_prompt(self) -> str:
         """Get formatted prompt"""
         root_name = os.path.basename(self.config.root_dir)
-        return HTML(f'<prompt>lsfs</prompt>: <path>{root_name}</path>$ ')
+        return HTML(f'<prompt>slpfs</prompt>: <path>{root_name}</path>$ ')
     
     def initialize_lsfs(self):
-        """Initialize LSFS with loading animation"""
+        """Initialize SLPFS with loading animation"""
         try:
-            with self.console.status("[cyan]Initializing LSFS...", spinner="dots"):
+            with self.console.status("[cyan]Initializing SLPFS...", spinner="dots"):
                 self.lsfs = LocalLSFS(self. config)
             return True
         except Exception as e: 
-            self.console.print(f"\n❌ Failed to initialize LSFS: {e}\n", style="red bold")
+            self.console.print(f"\n❌ Failed to initialize SLPFS: {e}\n", style="red bold")
             self.console.print("💡 Make sure Ollama is running:  ollama serve\n", style="yellow")
             self.console.print(f"💡 Or check if model '{self.config.ollama_model}' is installed\n", style="yellow")
             return False
