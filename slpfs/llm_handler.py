@@ -1,3 +1,28 @@
+"""
+slpfs/llm_handler.py
+
+Ollama LLM Integration Layer for Local SLPFS
+
+Provides the language-model interface used by the semantic file system.
+This module is responsible for:
+
+- Connecting to and validating a local Ollama service
+- Translating natural-language user input into structured file-system commands
+- Extracting and validating JSON payloads from model responses
+- Generating friendly natural-language summaries of operation results
+
+Primary components:
+   - _extract_first_json_block: Safely finds the first balanced JSON object in text
+   - OllamaHandler: Wrapper around Ollama /api/chat and /api/generate endpoints,
+     with timeout handling, error normalization, and response parsing
+
+Design notes:
+   - Local-first operation (no cloud dependency assumed)
+   - Defensive parsing to tolerate non-JSON text around model outputs
+   - Returns structured error objects when parsing or requests fail
+   
+"""
+
 import requests
 import json
 from typing import List, Dict, Any, Optional

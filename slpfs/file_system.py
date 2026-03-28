@@ -1,20 +1,40 @@
+"""
+slpfs/file_system.py
+
+Handles semantic indexing, searching, standard file operations, stats/reindexing, and natural language command routing through as LLM
+
+Responsibilities:
+- Mounting and indexing the root directory on initialization.
+- Create, read, write, delete, move, and copy files/directories with automatic vector store updates.
+- Semantic search using the vector store with optional keyword filtering.
+- Re-indexing all files and providing system statistics.
+- Processing natural language commands by parsing them with the LLM and executing the corresponding file operations.
+
+required components:
+- config: SLPFSConfig instance for settings
+- vector_store: VectorStore instance for embedding and searching file content
+- llm: OllamaHandler instance for parsing commands and summarizing results
+
+version: 1.0.0
+"""
+
 import os
 import shutil
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from . vector_store import VectorStore
 from .llm_handler import OllamaHandler
-from .config import LSFSConfig
+from .config import  SLPFSConfig
 
-class LocalLSFS:
+class LocalSLPFS:
     """Local LLM-based Semantic File System"""
     
-    def __init__(self, config: LSFSConfig):
+    def __init__(self, config: SLPFSConfig):
         self.config = config
         self.root_dir = config.root_dir
         
         print("=" * 60)
-        print("🚀 Initializing Local LSFS")
+        print("🚀 Initializing Local SLPFS")
         print("=" * 60)
         
         # Initialize components
@@ -32,7 +52,7 @@ class LocalLSFS:
         self._mount_root()
         
         print("=" * 60)
-        print("✅ LSFS Ready!")
+        print("✅ SLPFS Ready!")
         print("=" * 60)
     
     def _mount_root(self):

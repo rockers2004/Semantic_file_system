@@ -1,20 +1,38 @@
+"""
+slpfs/config_loader.py
+
+
+Loads LSFS configuration from a YAML file and maps it onto an LSFSConfig instance.
+
+
+Provides:
+    - load_config_from_yaml() : Reads `config.yaml` (or a custom path) and
+      populates an LSFSConfig dataclass with values for directories, Ollama
+      settings, embedding model, search parameters, performance options, and
+      feature flags. Falls back to LSFSConfig defaults if the file is missing
+      or malformed.
+
+Expected top-level YAML keys:
+    directories, ollama, embedding, search, performance, features
+"""
+
 import yaml
 import os
-from . config import LSFSConfig
+from . config import SLPFSConfig
 
-def load_config_from_yaml(yaml_path: str = "config.yaml") -> LSFSConfig:
+def load_config_from_yaml(yaml_path: str = "config.yaml") -> SLPFSConfig:
     """Load configuration from YAML file"""
     
     if not os.path.exists(yaml_path):
         print(f"⚠️  Config file not found: {yaml_path}")
         print("📝 Using default configuration")
-        return LSFSConfig()
+        return SLPFSConfig()
     
     try:
         with open(yaml_path, 'r') as f:
             yaml_config = yaml.safe_load(f)
         
-        config = LSFSConfig()
+        config = SLPFSConfig()
         
         # Override with YAML values
         if 'directories' in yaml_config: 
@@ -45,4 +63,4 @@ def load_config_from_yaml(yaml_path: str = "config.yaml") -> LSFSConfig:
     except Exception as e: 
         print(f"❌ Error loading config: {e}")
         print("📝 Using default configuration")
-        return LSFSConfig()
+        return SLPFSConfig()

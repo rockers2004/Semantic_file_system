@@ -1,3 +1,20 @@
+"""
+slpfs/vector_store.py
+
+Vector Store and Semantic Indexing Layer for Local SLPFS.
+
+This module manages embedding generation, persistent vector storage, and
+semantic retrieval for file content using SentenceTransformers and ChromaDB.
+
+Responsibilities:
+   - Initialize a persistent ChromaDB collection for file embeddings
+   - Read file content safely with size/error guards
+   - Index individual files with metadata and change detection
+   - Recursively index directories while skipping hidden entries
+   - Perform semantic search with optional keyword augmentation
+   - Remove file entries from the index and expose index statistics
+"""
+
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
