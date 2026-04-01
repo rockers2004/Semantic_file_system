@@ -100,6 +100,17 @@ class SearchResponse(BaseModel):
     results: List[SearchResultItem]
 
 
+class CommandRequest(BaseModel):
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Text cannot be empty")
+        return value.strip()
+
+
 class FileReadRequest(BaseModel):
     path: str
 
@@ -262,6 +273,58 @@ def _resolve_safe_path(raw_path: Optional[str]) -> Path:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Path is outside of the configured root") from exc
     return candidate
+
+def _fallback_search(query: str, k: int) -> List[SearchResultItem]:
+    """
+    Placeholder search function that simulates search results based on filename matching.
+    In a real implementation, this would interface with the Ollama-based search module.
+
+    Args:
+        query (str): The search query string.
+        k (int): The maximum number of results to return.
+    Returns:
+        List[SearchResultItem]: A list of search result items matching the query.
+    """
+    current_root = get_root()
+    query_lower = query.lower()
+    matches: List[SearchResultItem] = []
+
+    for file_path in current_root.rglob("*"):
+        if not file_path.is_file():
+            continue
+
+        try:
+            name_match = query_lower in file_path.name.lower()
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+            content_lower = content.lower()
+            content_match = query_lower in content_lower
+        except OSError:
+            continue
+            
+        if not name_match and not content_match:
+            continue
+
+        score = 1.0 if name_match else 0.5
+        preview = None
+
+        if content_match:
+            index = content_lower.find(query_lower)
+            start = max(0, index - 80)
+            end = min(len(content), index + len(query) + 80)
+            preview = content[start:end].replace("\n", " ").replace("\r", " ")
+
+        matches.append(
+            SearchResultItem(
+                path=str(file_path),
+                score=score,
+                preview=preview
+            )
+        )
+
+        if len(matches) >= k:
+            break
+    
+    return matches
 
 
 # Middleware to add request_id
@@ -453,15 +516,83 @@ async def search_files(request: Request, payload: SearchRequest):
     In a real implementation, this would interface with the Ollama-based search module.
     """
     # search logic goes here
+
+    query = payload.query.strip()
+    k = payload.k
+
+    results = _fallback_search(query, k)
+
     return SuccessResponse(
-        ok = True,
-        data ={
-            "query": payload.query,
-            "k": payload.k,
-            "mode": payload.mode,
-            "results": []
+        ok =True,
+        data = {
+            "query": query,
+            "total": len(results),
+            "results":[
+                {
+                    "path": result.path,
+                    "score": result.score,
+                    "snippet": result.preview or "",
+                    "is_dir": False,
+                }
+                for result in results
+            ],
         },
         meta = Meta(request_id=request.state.request_id)
+    )
+
+
+@app.post("/api/v1/command")
+async def run_command(request: Request, payload: CommandRequest):
+    """
+    Unified text endpoint for command-like and search-like inputs.
+    Returns a structured placeholder for command parsing until real SLPFS parser is wired.
+    """
+    text = payload.text.strip()
+
+    command_prefixes = ("/", "cmd:", "command:")
+    command_keywords = ("open ", "summarize ", "index ", "find ", "search ")
+    lowered = text.lower()
+    is_command_like = lowered.startswith(command_prefixes) or any(lowered.startswith(keyword) for keyword in command_keywords)
+
+    if is_command_like:
+        return SuccessResponse(
+            ok=True,
+            data={
+                "kind": "command_placeholder",
+                "input": text,
+                "intent": "command",
+                "message": "Command parsing is not wired yet. This is a structured placeholder response.",
+                "parsed": {
+                    "raw": text,
+                    "action": "unresolved",
+                    "args": [],
+                },
+                "results": [],
+            },
+            meta=Meta(request_id=request.state.request_id),
+        )
+
+    fallback_results = _fallback_search(text, 10)
+
+    return SuccessResponse(
+        ok=True,
+        data={
+            "kind": "search",
+            "input": text,
+            "intent": "search",
+            "message": "Search-style query handled by fallback matcher.",
+            "parsed": None,
+            "results": [
+                {
+                    "path": result.path,
+                    "score": result.score,
+                    "snippet": result.preview or "",
+                    "is_dir": False,
+                }
+                for result in fallback_results
+            ],
+        },
+        meta=Meta(request_id=request.state.request_id),
     )
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { StartupScreen } from "./components/StartupScreen";
 import { FileTree } from "./components/FileTree";
 import { FilePreview } from "./components/FilePreview";
+import { UnifiedInput } from "./components/UnifiedInput";
 import { getConfig, updateRootPath } from "./api/files";
 import { open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
@@ -115,6 +116,8 @@ function App() {
       <main className="main-panel">
         <h1>SLPFS Desktop App</h1>
         <p>Backend ready.</p>
+
+        <UnifiedInput setSelectedFile={setSelectedFile} />
 
         <div className="selected-file-card">
           <strong>Selected file:</strong>

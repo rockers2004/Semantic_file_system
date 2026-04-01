@@ -329,3 +329,267 @@ button {
     color: #ff8f8f;
   }
 }
+.search-panel {
+  margin-top: 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
+.search-panel h3 {
+  margin: 0 0 8px;
+}
+
+.search-controls {
+  display: grid;
+  grid-template-columns: 1fr 90px 110px;
+  gap: 8px;
+}
+
+.search-controls input,
+.search-controls select {
+  width: 100%;
+}
+
+.search-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #666;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f8f8f8;
+}
+
+.search-error {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #a22222;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #fff2f2;
+  border: 1px solid #f2cccc;
+}
+
+.search-results {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-total {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.search-result-item {
+  text-align: left;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.search-result-item:hover {
+  background: #eef3ff;
+}
+
+.search-result-path {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.search-result-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #7a7a7a;
+}
+
+.search-result-snippet {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #333;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+@media (max-width: 900px) {
+  .search-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .search-panel {
+    border-color: #4b4b4b;
+    background: #2d2d2d;
+  }
+
+  .search-hint {
+    color: #b9b9b9;
+    background: #252525;
+  }
+
+  .search-error {
+    color: #ff9f9f;
+    background: #3a2323;
+    border-color: #6b3434;
+  }
+
+  .search-total,
+  .search-result-meta {
+    color: #b9b9b9;
+  }
+
+  .search-result-item {
+    border-color: #4b4b4b;
+    background: #2d2d2d;
+  }
+
+  .search-result-path,
+  .search-result-snippet {
+    color: #e0e0e0;
+  }
+}
+
+.unified-input-panel {
+  margin-top: 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
+.unified-input-panel h3 {
+  margin: 0 0 8px;
+}
+
+.unified-input-controls {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 8px;
+}
+
+.unified-input-controls input {
+  width: 100%;
+}
+
+.unified-status {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #666;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f8f8f8;
+}
+
+.unified-error {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #a22222;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #f2cccc;
+  background: #fff2f2;
+}
+
+.unified-result {
+  margin-top: 10px;
+}
+
+.unified-result-kind,
+.unified-result-message {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #555;
+}
+
+.unified-result-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.unified-result-item {
+  text-align: left;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.unified-result-item:hover {
+  background: #eef3ff;
+}
+
+.unified-result-path {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.unified-result-score {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #7a7a7a;
+}
+
+.unified-result-snippet {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #333;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+@media (max-width: 900px) {
+  .unified-input-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .unified-input-panel {
+    border-color: #4b4b4b;
+    background: #2d2d2d;
+  }
+
+  .unified-status {
+    color: #b9b9b9;
+    background: #252525;
+  }
+
+  .unified-error {
+    color: #ff9f9f;
+    background: #3a2323;
+    border-color: #6b3434;
+  }
+
+  .unified-result-kind,
+  .unified-result-message,
+  .unified-result-score {
+    color: #b9b9b9;
+  }
+
+  .unified-result-item {
+    border-color: #4b4b4b;
+    background: #2d2d2d;
+  }
+
+  .unified-result-path,
+  .unified-result-snippet {
+    color: #e0e0e0;
+  }
+}

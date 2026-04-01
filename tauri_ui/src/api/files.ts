@@ -41,6 +41,45 @@ export interface FileReadResponse {
   meta: unknown;
 }
 
+export interface SearchResult {
+  path: string;
+  score: number;
+  snippet: string;
+  is_dir: false;
+}
+
+interface SearchResponse {
+  ok: boolean;
+  data: {
+    query: string;
+    total: number;
+    results: SearchResult[];
+  };
+  error?:  { code?: string; message?: string; details?: unknown } | null;
+  meta?: unknown;
+}
+
+export interface CommandResultItem {
+  path: string;
+  score: number;
+  snippet: string;
+  is_dir: false;
+}
+
+interface CommandResponse {
+  ok: boolean;
+  data: {
+    kind: "command_placeholder" | "search";
+    input: string;
+    intent: "command" | "search";
+    message: string;
+    parsed: { raw: string; action: string; args: string[] } | null;
+    results: CommandResultItem[];
+  };
+  error?: { code?: string; message?: string; details?: unknown } | null;
+  meta?: unknown;
+}
+
 export async function readFile(path: string): Promise<FileReadResponse["data"]> {
   const response = await fetch(`${BACKEND_URL}/api/v1/file/read`, {
     method: "POST",
@@ -120,6 +159,46 @@ export async function updateRootPath(rootPath: string): Promise<ConfigResponse["
   const json = (await response.json()) as ConfigResponse;
   if (!json.ok) {
     throw new Error(json.error?.message || "Failed to update root path");
+  }
+
+  return json.data;
+}
+
+export async function searchFiles(query: string, k = 10, mode = "normal"): Promise<SearchResponse["data"]> {
+  const response = await fetch(`${BACKEND_URL}/api/v1/search`, {
+    method: "POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify({ query, k, mode }),
+  });
+  
+  if(!response.ok) {
+    const text = await response.text();
+    throw new Error(`Search API failed: ${response.status} ${text}`);
+  }
+
+  const json = (await response.json()) as SearchResponse;
+  if(!json.ok) {
+    throw new Error(json.error?.message || "Search failed");
+  }
+
+  return json.data;
+}
+
+export async function runCommand(text: string): Promise<CommandResponse["data"]> {
+  const response = await fetch(`${BACKEND_URL}/api/v1/command`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!response.ok) {
+    const textResponse = await response.text();
+    throw new Error(`Command API failed: ${response.status} ${textResponse}`);
+  }
+
+  const json = (await response.json()) as CommandResponse;
+  if (!json.ok) {
+    throw new Error(json.error?.message || "Command failed");
   }
 
   return json.data;
