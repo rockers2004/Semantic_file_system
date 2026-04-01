@@ -3,9 +3,10 @@ import { fetchTree, TreeEntry } from "../api/files";
 
 interface FileTreeProps {
   onFileSelect: (path: string) => void;
+  refreshToken?: number;
 }
 
-export function FileTree({ onFileSelect }: FileTreeProps) {
+export function FileTree({ onFileSelect, refreshToken = 0 }: FileTreeProps) {
   const [rootPath, setRootPath] = useState<string>("");
   const [rootEntries, setRootEntries] = useState<TreeEntry[]>([]);
   const [childrenByPath, setChildrenByPath] = useState<Record<string, TreeEntry[]>>({});
@@ -15,6 +16,13 @@ export function FileTree({ onFileSelect }: FileTreeProps) {
 
   useEffect(() => {
     const loadRoot = async () => {
+      setError("");
+      setRootPath("");
+      setExpanded({});
+      setChildrenByPath({});
+      setLoading({});
+      setRootEntries([]);
+
       try {
         const data = await fetchTree();
         setRootPath(data.path);
@@ -25,7 +33,7 @@ export function FileTree({ onFileSelect }: FileTreeProps) {
     };
 
     loadRoot();
-  }, []);
+  }, [refreshToken]);
 
   const toggleDirectory = async (entry: TreeEntry) => {
     if (!entry.is_dir) {

@@ -46,6 +46,96 @@
   padding: 20px;
 }
 
+.root-selector-card {
+  margin-top: 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
+.root-selector-card h3 {
+  margin: 0 0 8px;
+}
+
+.root-path-display {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #666;
+  word-break: break-all;
+}
+
+.root-selector-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.root-selector-row input {
+  flex: 1 1 100%;
+}
+
+.root-selector-row button {
+  flex: 1 1 calc(50% - 4px);
+}
+
+.root-status-ok {
+  margin: 8px 0 0;
+  color: #246d1e;
+  font-size: 12px;
+}
+
+.root-status-error {
+  margin: 8px 0 0;
+  color: #a22222;
+  font-size: 12px;
+}
+
+.file-preview-panel {
+  margin-top: 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 12px;
+  height: calc(100vh - 200px);
+  display: flex;
+  flex-direction: column;
+}
+
+.file-preview-placeholder,
+.file-preview-status,
+.file-preview-error {
+  margin-top: 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.file-preview-content {
+  margin: 12px 0 0;
+  flex: 1;
+  overflow: auto;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.file-preview-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #666;
+}
+
+.file-preview-path {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #666;
+  word-break: break-all;
+}
+
 .selected-file-card {
   margin-top: 16px;
   border: 1px solid #d9d9d9;
@@ -197,6 +287,32 @@ button {
   .selected-file-card {
     border-color: #4b4b4b;
     background: #2d2d2d;
+  }
+
+  .root-selector-card {
+    border-color: #4b4b4b;
+    background: #2d2d2d;
+  }
+
+  .root-path-display {
+    color: #b9b9b9;
+  }
+
+  .root-status-ok {
+    color: #9ad291;
+  }
+
+  .file-preview-panel,
+  .file-preview-placeholder,
+  .file-preview-status,
+  .file-preview-error {
+    border-color: #4b4b4b;
+    background: #2d2d2d;
+  }
+
+  .file-preview-meta,
+  .file-preview-path {
+    color: #b9b9b9;
   }
 
   .tree-item:hover {
