@@ -22,10 +22,13 @@ Design notes:
    - Returns structured error objects when parsing or requests fail
    
 """
-
-import requests
 import json
-from typing import List, Dict, Any, Optional
+import logging
+from typing import  Dict, Any, Optional
+import requests
+
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_first_json_block(text: str) -> Optional[str]:
@@ -55,20 +58,20 @@ class OllamaHandler:
         # Allow slower local models without timing out
         self.request_timeout = 120
         
-        print(f"🤖 Connecting to Ollama:  {model} at {base_url}")
+        logger.info("Connecting to Ollama: %s at %s", model, base_url)
         
         # Test connection
         if not self._test_connection():
-            raise ConnectionError(f"❌ Cannot connect to Ollama at {base_url}")
+            raise ConnectionError(f"Cannot connect to Ollama at {base_url}")
         
-        print("✅ Ollama connected!")
+        logger.info("Ollama connected")
     
     def _test_connection(self) -> bool:
         """Test if Ollama is running"""
         try:
             response = requests.get(f"{self.base_url}/api/tags", timeout=5)
             return response.status_code == 200
-        except: 
+        except requests.RequestException: 
             return False
     
     def parse_command(self, user_input: str) -> Dict[str, Any]:
@@ -157,7 +160,7 @@ User: "delete old_file.txt"
             return {"operation": "error", "parameters": {"message": "LLM request failed"}, "confidence": 0.0}
         
         except Exception as e:
-            print(f"❌ LLM parsing error: {e}")
+            logger.exception("LLM parsing error")
             return {"operation": "error", "parameters": {"message": str(e)}, "confidence": 0.0}
     
     def summarize_results(self, operation: str, results: Any) -> str:

@@ -14,21 +14,24 @@ Responsibilities:
    - Perform semantic search with optional keyword augmentation
    - Remove file entries from the index and expose index statistics
 """
-
-import chromadb
-from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
 import hashlib
 import os
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import mimetypes
+import logging
+import chromadb
+from chromadb.config import Settings
+from sentence_transformers import SentenceTransformer
+
+    
+logger = logging.getLogger(__name__)
 
 class VectorStore: 
     """Handles embeddings and semantic search using ChromaDB"""
     
     def __init__(self, db_path: str, embedding_model: str):
-        print(f"🔧 Initializing vector store at {db_path}...")
+        logger.info("Initializing vector store at %s...", db_path)
         
         # Initialize ChromaDB with persistent storage
         self.client = chromadb.PersistentClient(
@@ -37,7 +40,7 @@ class VectorStore:
         )
         
         # Initialize embedding model
-        print(f"📥 Loading embedding model: {embedding_model}")
+        logger.info("Loading embedding model: %s", embedding_model)
         self.embedding_model = SentenceTransformer(embedding_model)
         
         # Create default collection
@@ -47,7 +50,7 @@ class VectorStore:
             metadata={"description": "LSFS file embeddings"}
         )
         
-        print("✅ Vector store ready!")
+        logger.info("Vector store ready")
     
     def _generate_file_id(self, file_path: str) -> str:
         """Generate unique ID for file"""
@@ -67,6 +70,7 @@ class VectorStore:
                 return content if content. strip() else "[Empty file]"
         
         except Exception as e:
+            logger.error("Error reading file %s: %s", file_path, e)
             return f"[Error reading file: {str(e)}]"
     
     def index_file(self, file_path: str, root_dir: str) -> str:
@@ -120,14 +124,14 @@ class VectorStore:
             return "indexed"
         
         except Exception as e: 
-            print(f"❌ Error indexing {file_path}: {e}")
+            logger.exception("Error indexing %s: %s", file_path, e)
             return "error"
     
     def index_directory(self, directory:  str) -> Dict[str, int]:
         """Index all files in directory (skip unchanged)."""
         stats = {"indexed": 0, "unchanged": 0, "errors": 0}
         
-        print(f"📂 Indexing directory: {directory}")
+        logger.info("Indexing directory: %s", directory)
         
         for root, dirs, files in os.walk(directory):
             # Skip hidden directories and vector DB
@@ -141,13 +145,18 @@ class VectorStore:
                 status = self.index_file(file_path, directory)
                 if status == "indexed":
                     stats["indexed"] += 1
-                    print(f"  ✓ {os.path.relpath(file_path, directory)}")
+                    logger.debug("Indexed file: %s", os.path.relpath(file_path, directory))
                 elif status == "unchanged":
                     stats["unchanged"] += 1
                 else:
                     stats["errors"] += 1
         
-        print(f"\n📊 Indexed: {stats['indexed']} | Unchanged: {stats['unchanged']} | Errors: {stats['errors']}")
+        logger.info(
+            "Indexed: %s | Unchanged: %s | Errors: %s",
+            stats["indexed"],
+            stats["unchanged"],
+            stats["errors"],
+        )
         return stats
     
     def search(self, query: str, k: int = 5, keywords: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -180,7 +189,7 @@ class VectorStore:
             return formatted_results
         
         except Exception as e: 
-            print(f"❌ Search error: {e}")
+            logger.exception("Search error")
             return []
     
     def remove_file(self, file_path: str) -> bool:
@@ -190,7 +199,7 @@ class VectorStore:
             self.collection.delete(ids=[file_id])
             return True
         except Exception as e:
-            print(f"❌ Error removing file: {e}")
+            logger.exception("Error removing file: %s", file_path)
             return False
     
     def get_stats(self) -> Dict[str, Any]:

@@ -27,20 +27,26 @@ Tech Stack:
     - Pathlib (filesystem handling)
 
 Notes:
-    - Search endpoint currently contains placeholder logic
     - Designed for local desktop usage (Tauri integration)
     - CORS is enabled for development flexibility
 """
-
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, field_validator, Field
-from typing import Optional, List
+from typing import Optional
 import uuid
 from datetime import datetime
 from pathlib import Path
 import os
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, field_validator, Field
 import yaml
+
+from backend_api.app.slpfs_runtime import (
+    get_runtime,
+    get_root_path,
+    set_root_path,
+    get_runtime_health_snapshot,
+    get_runtime_error,
+)
 
 app = FastAPI(title="Semantic File System API", version="0.1.0")
 
@@ -87,17 +93,17 @@ class SearchRequest(BaseModel):
             raise ValueError("Query cannot be empty")
         return value.strip()
 
-class SearchResultItem(BaseModel):
-    path: str
-    score: float
-    preview: Optional[str] = None
+# class SearchResultItem(BaseModel):
+#     path: str
+#     score: float
+#     preview: Optional[str] = None
 
 
-class SearchResponse(BaseModel):
-    query:str
-    k: int
-    mode: str
-    results: List[SearchResultItem]
+# class SearchResponse(BaseModel):
+#     query:str
+#     k: int
+#     mode: str
+#     results: List[SearchResultItem]
 
 
 class CommandRequest(BaseModel):
@@ -117,113 +123,113 @@ class FileReadRequest(BaseModel):
 class ConfigUpdateRequest(BaseModel):
     root_path: str
 
-CONFIG_FILE = Path(__file__).resolve().parents[2] / "config.yaml"
+# CONFIG_FILE = Path(__file__).resolve().parents[2] / "config.yaml"
 
 
-def _load_root_from_config() -> Optional[Path]:
-    """
-    Loads the root directory from config.yaml if it exists and is valid.
+# def _load_root_from_config() -> Optional[Path]:
+#     """
+#     Loads the root directory from config.yaml if it exists and is valid.
     
-    Returns:
-        Optional[Path]: Valid root path or None if invalid/missing
-    """
-    if not CONFIG_FILE.exists():
-        return None
+#     Returns:
+#         Optional[Path]: Valid root path or None if invalid/missing
+#     """
+#     if not CONFIG_FILE.exists():
+#         return None
 
-    try:
-        with CONFIG_FILE.open("r", encoding="utf-8") as file:
-            config_data = yaml.safe_load(file) or {}
-    except (OSError, yaml.YAMLError):
-        return None
+#     try:
+#         with CONFIG_FILE.open("r", encoding="utf-8") as file:
+#             config_data = yaml.safe_load(file) or {}
+#     except (OSError, yaml.YAMLError):
+#         return None
 
-    raw_root = str(config_data.get("directories", {}).get("root_dir", "")).strip()
-    if not raw_root:
-        return None
+#     raw_root = str(config_data.get("directories", {}).get("root_dir", "")).strip()
+#     if not raw_root:
+#         return None
 
-    try:
-        path = Path(raw_root).expanduser().resolve()
-    except OSError:
-        return None
+#     try:
+#         path = Path(raw_root).expanduser().resolve()
+#     except OSError:
+#         return None
 
-    if not path.exists() or not path.is_dir():
-        return None
+#     if not path.exists() or not path.is_dir():
+#         return None
 
-    return path
+#     return path
 
 
-def _save_root_to_config(root_path: Path) -> None:
-    """
-    persists the current root direcotory into config.yaml
-    Updats only the root field without affecting other config.
+# def _save_root_to_config(root_path: Path) -> None:
+#     """
+#     persists the current root direcotory into config.yaml
+#     Updats only the root field without affecting other config.
     
-    Args:
-        root_path (Path): The root directory path to save
-    Raises:
-        OSError: If there is an issue writing to the config file
-    returns:
-        None
-    """
-    try:
-        with CONFIG_FILE.open("r", encoding="utf-8") as file:
-            config_data = yaml.safe_load(file) or {}
-    except (OSError, yaml.YAMLError):
-        config_data = {}
+#     Args:
+#         root_path (Path): The root directory path to save
+#     Raises:
+#         OSError: If there is an issue writing to the config file
+#     returns:
+#         None
+#     """
+#     try:
+#         with CONFIG_FILE.open("r", encoding="utf-8") as file:
+#             config_data = yaml.safe_load(file) or {}
+#     except (OSError, yaml.YAMLError):
+#         config_data = {}
 
-    directories = config_data.get("directories")
-    if not isinstance(directories, dict):
-        directories = {}
-    directories["root_dir"] = str(root_path)
-    config_data["directories"] = directories
+#     directories = config_data.get("directories")
+#     if not isinstance(directories, dict):
+#         directories = {}
+#     directories["root_dir"] = str(root_path)
+#     config_data["directories"] = directories
 
-    with CONFIG_FILE.open("w", encoding="utf-8") as file:
-        yaml.safe_dump(config_data, file, sort_keys=False)
-
-
-_env_root = os.getenv("SLPFS_ROOT")
-if _env_root:
-    _current_root = Path(_env_root).expanduser().resolve()
-else:
-    _current_root = _load_root_from_config() or Path.cwd().resolve()
-
-_state = {"root_path": _current_root}
-
-try:
-    _save_root_to_config(_current_root)
-except OSError:
-    # App can still run with in-memory root even if persistence write fails at startup.
-    pass
+#     with CONFIG_FILE.open("w", encoding="utf-8") as file:
+#         yaml.safe_dump(config_data, file, sort_keys=False)
 
 
+# _env_root = os.getenv("SLPFS_ROOT")
+# if _env_root:
+#     _current_root = Path(_env_root).expanduser().resolve()
+# else:
+#     _current_root = _load_root_from_config() or Path.cwd().resolve()
+
+# _state = {"root_path": _current_root}
+
+# try:
+#     _save_root_to_config(_current_root)
+# except OSError:
+#     # App can still run with in-memory root even if persistence write fails at startup.
+#     pass
 
 
-def get_root() -> Path:
-    """
-    Retrieves the current root directory path from the application state.
+
+
+# def get_root() -> Path:
+#     """
+#     Retrieves the current root directory path from the application state.
     
-    Returns:
-        Path: The current root directory path.
-    """
-    return _state["root_path"]
+#     Returns:
+#         Path: The current root directory path.
+#     """
+#     return _state["root_path"]
 
 
 
-def set_root(new_root: Path):
-    """
-    Updates the current root directory at runtime and persists it
-    to config.yaml. Also updates the in-memory state for immediate effect.
+# def set_root(new_root: Path):
+#     """
+#     Updates the current root directory at runtime and persists it
+#     to config.yaml. Also updates the in-memory state for immediate effect.
     
-    Args:
-        new_root (Path): The new root directory path to set.
-    Raises:
-        HTTPException: If there is an issue persisting the new root to config.yaml.
-    Returns:
-        None
-    """
-    try:
-        _save_root_to_config(new_root)
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail="Failed to persist root path to config.yaml") from exc
-    _state["root_path"] = new_root
+#     Args:
+#         new_root (Path): The new root directory path to set.
+#     Raises:
+#         HTTPException: If there is an issue persisting the new root to config.yaml.
+#     Returns:
+#         None
+#     """
+#     try:
+#         _save_root_to_config(new_root)
+#     except OSError as exc:
+#         raise HTTPException(status_code=500, detail="Failed to persist root path to config.yaml") from exc
+#     _state["root_path"] = new_root
 
 
 def validate_root_path(path_str: str) -> Path:
@@ -259,7 +265,7 @@ def _resolve_safe_path(raw_path: Optional[str]) -> Path:
     Returns:
         Path: The resolved and validated path.
     """
-    current_root = get_root()
+    current_root = Path(get_root_path()).resolve()
 
     if not raw_path:
         candidate = current_root
@@ -274,57 +280,57 @@ def _resolve_safe_path(raw_path: Optional[str]) -> Path:
         raise HTTPException(status_code=400, detail="Path is outside of the configured root") from exc
     return candidate
 
-def _fallback_search(query: str, k: int) -> List[SearchResultItem]:
-    """
-    Placeholder search function that simulates search results based on filename matching.
-    In a real implementation, this would interface with the Ollama-based search module.
+# def _fallback_search(query: str, k: int) -> List[SearchResultItem]:
+#     """
+#     Placeholder search function that simulates search results based on filename matching.
+#     In a real implementation, this would interface with the Ollama-based search module.
 
-    Args:
-        query (str): The search query string.
-        k (int): The maximum number of results to return.
-    Returns:
-        List[SearchResultItem]: A list of search result items matching the query.
-    """
-    current_root = get_root()
-    query_lower = query.lower()
-    matches: List[SearchResultItem] = []
+#     Args:
+#         query (str): The search query string.
+#         k (int): The maximum number of results to return.
+#     Returns:
+#         List[SearchResultItem]: A list of search result items matching the query.
+#     """
+#     current_root = get_root()
+#     query_lower = query.lower()
+#     matches: List[SearchResultItem] = []
 
-    for file_path in current_root.rglob("*"):
-        if not file_path.is_file():
-            continue
+#     for file_path in current_root.rglob("*"):
+#         if not file_path.is_file():
+#             continue
 
-        try:
-            name_match = query_lower in file_path.name.lower()
-            content = file_path.read_text(encoding="utf-8", errors="replace")
-            content_lower = content.lower()
-            content_match = query_lower in content_lower
-        except OSError:
-            continue
+#         try:
+#             name_match = query_lower in file_path.name.lower()
+#             content = file_path.read_text(encoding="utf-8", errors="replace")
+#             content_lower = content.lower()
+#             content_match = query_lower in content_lower
+#         except OSError:
+#             continue
             
-        if not name_match and not content_match:
-            continue
+#         if not name_match and not content_match:
+#             continue
 
-        score = 1.0 if name_match else 0.5
-        preview = None
+#         score = 1.0 if name_match else 0.5
+#         preview = None
 
-        if content_match:
-            index = content_lower.find(query_lower)
-            start = max(0, index - 80)
-            end = min(len(content), index + len(query) + 80)
-            preview = content[start:end].replace("\n", " ").replace("\r", " ")
+#         if content_match:
+#             index = content_lower.find(query_lower)
+#             start = max(0, index - 80)
+#             end = min(len(content), index + len(query) + 80)
+#             preview = content[start:end].replace("\n", " ").replace("\r", " ")
 
-        matches.append(
-            SearchResultItem(
-                path=str(file_path),
-                score=score,
-                preview=preview
-            )
-        )
+#         matches.append(
+#             SearchResultItem(
+#                 path=str(file_path),
+#                 score=score,
+#                 preview=preview
+#             )
+#         )
 
-        if len(matches) >= k:
-            break
+#         if len(matches) >= k:
+#             break
     
-    return matches
+#     return matches
 
 
 # Middleware to add request_id
@@ -342,14 +348,18 @@ async def health_check(request: Request):
     Check backend health status
     Returns status of backend and dependencies (Ollama, models)
     """
+    snapshot = get_runtime_health_snapshot()
     return SuccessResponse(
         ok=True,
         data={
-            "status": "healthy",
+            "status": "healthy" if snapshot.get("runtime_ready") else "degraded",
             "timestamp": datetime.utcnow().isoformat(),
             "backend": "ready",
-            "ollama": "checking...",
-            "model": "checking...",
+            "runtime_ready": snapshot.get("runtime_ready"),
+            "runtime_error": snapshot.get("runtime_error"),
+            "root_path": snapshot.get("root_path"),
+            "ollama_model": snapshot.get("ollama_model"),
+            "embedding_model": snapshot.get("embedding_model"),
         },
         meta=Meta(request_id=request.state.request_id),
     )
@@ -362,7 +372,7 @@ async def get_config(request: Request):
     return SuccessResponse(
         ok=True,
         data={
-            "root_path": str(get_root()),
+            "root_path": get_root_path(),
             "max_depth": 10,
         },
         meta=Meta(request_id=request.state.request_id),
@@ -370,7 +380,7 @@ async def get_config(request: Request):
 
 def _update_root_config_response(request: Request, payload: ConfigUpdateRequest) -> SuccessResponse:
     """
-    Validates and updates root configuration, then builds a stadardized API response with updated values.
+    Validates and updates root configuration, then builds a standardized API response with updated values.
 
     Args:
         request (Request): FastAPI request object
@@ -379,11 +389,17 @@ def _update_root_config_response(request: Request, payload: ConfigUpdateRequest)
         SuccessResponse: Standardized API response with updated config data
     """
     new_root = validate_root_path(payload.root_path)
-    set_root(new_root)
+    try:
+        set_root_path(str(new_root))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     return SuccessResponse(
         ok=True,
         data={
-            "root_path": str(get_root()),
+            "root_path": get_root_path(),
             "max_depth": 10,
         },
         meta=Meta(request_id=request.state.request_id),
@@ -439,7 +455,7 @@ async def get_tree(request: Request, path: Optional[str] = None, depth: int = 1)
     return SuccessResponse(
         ok=True,
         data={
-            "root": str(get_root()),
+            "root": get_root_path(),
             "path": str(target),
             "depth": max(1, depth),
             "entries": entries,
@@ -512,7 +528,7 @@ async def read_file(request: Request, payload: FileReadRequest):
 async def search_files(request: Request, payload: SearchRequest):
     """
     Search for files matching the query within the configured root directory.
-    This is a placeholder implementation that returns dummy results.
+
     In a real implementation, this would interface with the Ollama-based search module.
     """
     # search logic goes here
@@ -520,24 +536,34 @@ async def search_files(request: Request, payload: SearchRequest):
     query = payload.query.strip()
     k = payload.k
 
-    results = _fallback_search(query, k)
+    try:
+        runtime = get_runtime()
+        core_result = runtime.search_files(query=query, k=k)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Search failed") from exc
+
+    results = core_result.get("results", [])
 
     return SuccessResponse(
-        ok =True,
-        data = {
+        ok=True,
+        data={
             "query": query,
             "total": len(results),
-            "results":[
+            "results": [
                 {
-                    "path": result.path,
-                    "score": result.score,
-                    "snippet": result.preview or "",
+                    "path": item.get("file_path", ""),
+                    "score": item.get("score", 0.0),
+                    "snippet": item.get("preview", "") or "",
                     "is_dir": False,
                 }
-                for result in results
+                for item in results
             ],
         },
-        meta = Meta(request_id=request.state.request_id)
+        meta=Meta(request_id=request.state.request_id),
     )
 
 
@@ -549,48 +575,29 @@ async def run_command(request: Request, payload: CommandRequest):
     """
     text = payload.text.strip()
 
-    command_prefixes = ("/", "cmd:", "command:")
-    command_keywords = ("open ", "summarize ", "index ", "find ", "search ")
-    lowered = text.lower()
-    is_command_like = lowered.startswith(command_prefixes) or any(lowered.startswith(keyword) for keyword in command_keywords)
-
-    if is_command_like:
-        return SuccessResponse(
-            ok=True,
-            data={
-                "kind": "command_placeholder",
-                "input": text,
-                "intent": "command",
-                "message": "Command parsing is not wired yet. This is a structured placeholder response.",
-                "parsed": {
-                    "raw": text,
-                    "action": "unresolved",
-                    "args": [],
-                },
-                "results": [],
-            },
-            meta=Meta(request_id=request.state.request_id),
-        )
-
-    fallback_results = _fallback_search(text, 10)
+    try:
+        runtime = get_runtime()
+        result = runtime.process_natural_language(text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Command execution failed") from exc
 
     return SuccessResponse(
         ok=True,
         data={
-            "kind": "search",
+            "kind": "command",
             "input": text,
-            "intent": "search",
-            "message": "Search-style query handled by fallback matcher.",
-            "parsed": None,
-            "results": [
-                {
-                    "path": result.path,
-                    "score": result.score,
-                    "snippet": result.preview or "",
-                    "is_dir": False,
-                }
-                for result in fallback_results
-            ],
+            "intent": "command",
+            "message": result.get("summary") or result.get("message") or "",
+            "parsed": {
+                "raw": text,
+                "action": result.get("operation", ""),
+                "args": result.get("parameters", {}),
+            },
+            "results": result.get("results", []),
         },
         meta=Meta(request_id=request.state.request_id),
     )

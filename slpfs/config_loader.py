@@ -17,15 +17,22 @@ Expected top-level YAML keys:
 """
 
 import yaml
+import logging
 import os
-from . config import SLPFSConfig
+try:
+    from .config import SLPFSConfig
+except ImportError:
+    from config import SLPFSConfig
+
+logger = logging.getLogger(__name__)
+
 
 def load_config_from_yaml(yaml_path: str = "config.yaml") -> SLPFSConfig:
     """Load configuration from YAML file"""
     
     if not os.path.exists(yaml_path):
-        print(f"⚠️  Config file not found: {yaml_path}")
-        print("📝 Using default configuration")
+        logger.warning("Config file not found: %s", yaml_path)
+        logger.info("Using default configuration")
         return SLPFSConfig()
     
     try:
@@ -57,10 +64,10 @@ def load_config_from_yaml(yaml_path: str = "config.yaml") -> SLPFSConfig:
             config.enable_versioning = yaml_config['features'].get('enable_versioning', False)
             config.enable_redis = yaml_config['features'].get('enable_redis', False)
         
-        print(f"✅ Configuration loaded from {yaml_path}")
+        logger.info("Configuration loaded from %s", yaml_path)
         return config
     
-    except Exception as e: 
-        print(f"❌ Error loading config: {e}")
-        print("📝 Using default configuration")
+    except Exception as e:
+        logger.exception("Error loading config")
+        logger.info("Using default configuration")
         return SLPFSConfig()

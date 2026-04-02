@@ -20,11 +20,14 @@ version: 1.0.0
 
 import os
 import shutil
-from typing import Dict, Any, List, Optional
+import logging
+from typing import Dict, Any, Optional
 from datetime import datetime
-from . vector_store import VectorStore
-from .llm_handler import OllamaHandler
-from .config import  SLPFSConfig
+from slpfs.vector_store import VectorStore
+from slpfs.llm_handler import OllamaHandler
+from slpfs.config import  SLPFSConfig
+
+logger = logging.getLogger(__name__)
 
 class LocalSLPFS:
     """Local LLM-based Semantic File System"""
@@ -33,9 +36,7 @@ class LocalSLPFS:
         self.config = config
         self.root_dir = config.root_dir
         
-        print("=" * 60)
-        print("🚀 Initializing Local SLPFS")
-        print("=" * 60)
+        logger.info("Initializing Local SLPFS")
         
         # Initialize components
         self.vector_store = VectorStore(
@@ -51,21 +52,19 @@ class LocalSLPFS:
         # Mount root directory
         self._mount_root()
         
-        print("=" * 60)
-        print("✅ SLPFS Ready!")
-        print("=" * 60)
+        logger.info("SLPFS Ready")
     
     def _mount_root(self):
         """Mount and index root directory"""
-        print(f"\n📁 Mounting root directory: {self.root_dir}")
+        logger.info("Mounting root directory: %s", self.root_dir)
         
         if os.path.exists(self.root_dir):
             # Re-index existing files
             stats = self. vector_store.index_directory(self.root_dir)
-            print(f"✅ Mounted with {stats['indexed']} files indexed")
+            logger.info("Mounted with %s files indexed", stats["indexed"])
         else:
             os.makedirs(self.root_dir, exist_ok=True)
-            print("✅ Created new root directory")
+            logger.info("Created new root directory")
     
     def create_file(self, file_name: str, content: str = "") -> Dict[str, Any]:
         """Create a new file"""
@@ -91,6 +90,7 @@ class LocalSLPFS:
             }
         
         except Exception as e:
+            logger.error("Error creating file: %s", e)
             return {"success": False, "error": str(e)}
     
     def create_directory(self, dir_name: str) -> Dict[str, Any]:
@@ -106,6 +106,7 @@ class LocalSLPFS:
             }
         
         except Exception as e: 
+            logger.error("Error creating directory: %s", e)
             return {"success": False, "error": str(e)}
     
     def write_file(self, file_name: str, content: str, append: bool = False) -> Dict[str, Any]:
