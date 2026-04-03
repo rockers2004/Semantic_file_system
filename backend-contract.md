@@ -128,3 +128,25 @@ When breaking change is needed:
 2. No direct calls from widgets into vector store or llm handler.
 3. Long-running operations must execute in worker threads.
 4. Exceptions are converted into error responses before reaching UI.
+
+## 11. API Behavior Notes
+These notes describe expected behavior of the current backend API endpoints used by the GUI.
+
+1. /api/v1/command is a real SLPFS natural-language pipeline.
+- Request text is passed to LocalSLPFS.process_natural_language(...).
+- The API maps runtime results into a normalized response envelope.
+- Low-confidence or parser/runtime failures are surfaced clearly via status/reason/error fields.
+
+2. /api/v1/search is semantic-first.
+- Default path uses LocalSLPFS.search_files(query, k, keywords=None).
+- Runtime search results are mapped into frontend contract fields (path, score, snippet, is_dir).
+- Optional fallback search is backup-only and not the default path.
+
+3. /api/v1/health is real readiness, not placeholder status.
+- Response is based on runtime health snapshot values.
+- Includes backend status, runtime loaded state, ollama/model status, indexed file count, and current root.
+
+4. /api/v1/config root updates rebuild runtime.
+- Root updates are applied through runtime set_root_path(...).
+- Runtime root is the single authority (no separate root state in API module).
+- Successful update persists config and rebuilds runtime for the new root.

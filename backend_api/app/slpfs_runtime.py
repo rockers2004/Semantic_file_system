@@ -145,7 +145,24 @@ def get_runtime_health_snapshot() -> dict[str, Any]:
             "ollama_model": runtime.config.ollama_model if runtime else None,
             "embedding_model": runtime.config.embedding_model if runtime else None,
         }
-        logger.info("Generating SLPFS runtime health snapshot", extra=snapshot)
+        # if runtime exists, get detailed stats
+        if runtime:
+            try:
+                stats = runtime.get_stats()
+                snapshot["indexed_files"] = stats.get("indexed_files", 0)
+                snapshot["total_files"] = stats.get("total_files", 0)
+                snapshot["root_directory"] = stats.get("root_directory")
+            except Exception as e:
+                snapshot["stats_error"] = str(e)
+                logger.warning("Failed to get runtime stats", exc_info=True)
+
+            try:
+                ollama_ok = runtime.llm._test_connection()
+                snapshot["ollama_running"] = ollama_ok
+            except Exception as e:
+                snapshot["ollama_error"] = str(e)
+                snapshot["ollama_running"] = False
+                logger.warning("Failed to test Ollama connection", exc_info=True)
         return snapshot
 
 

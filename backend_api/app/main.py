@@ -10,7 +10,7 @@ Core Responsibilities:
     - Manage dynamic root directory configuration (with YAML persistence)
     - Ensure safe file access within the configured root
     - Provide file tree exploration and file content retrieval APIs
-    - Handle search requests (MVP placeholder implementation)
+    - Handle semantic search and command requests via shared runtime
     - Standardize API responses with metadata and error handling
 
 Key Features:
@@ -30,22 +30,20 @@ Notes:
     - Designed for local desktop usage (Tauri integration)
     - CORS is enabled for development flexibility
 """
+import os
 from typing import Optional
 import uuid
 from datetime import datetime
 from pathlib import Path
-import os
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator, Field
-import yaml
 
 from backend_api.app.slpfs_runtime import (
     get_runtime,
     get_root_path,
     set_root_path,
     get_runtime_health_snapshot,
-    get_runtime_error,
 )
 
 app = FastAPI(title="Semantic File System API", version="0.1.0")
@@ -93,18 +91,6 @@ class SearchRequest(BaseModel):
             raise ValueError("Query cannot be empty")
         return value.strip()
 
-# class SearchResultItem(BaseModel):
-#     path: str
-#     score: float
-#     preview: Optional[str] = None
-
-
-# class SearchResponse(BaseModel):
-#     query:str
-#     k: int
-#     mode: str
-#     results: List[SearchResultItem]
-
 
 class CommandRequest(BaseModel):
     text: str
@@ -123,137 +109,59 @@ class FileReadRequest(BaseModel):
 class ConfigUpdateRequest(BaseModel):
     root_path: str
 
-# CONFIG_FILE = Path(__file__).resolve().parents[2] / "config.yaml"
 
 
-# def _load_root_from_config() -> Optional[Path]:
-#     """
-#     Loads the root directory from config.yaml if it exists and is valid.
-    
-#     Returns:
-#         Optional[Path]: Valid root path or None if invalid/missing
-#     """
-#     if not CONFIG_FILE.exists():
-#         return None
-
-#     try:
-#         with CONFIG_FILE.open("r", encoding="utf-8") as file:
-#             config_data = yaml.safe_load(file) or {}
-#     except (OSError, yaml.YAMLError):
-#         return None
-
-#     raw_root = str(config_data.get("directories", {}).get("root_dir", "")).strip()
-#     if not raw_root:
-#         return None
-
-#     try:
-#         path = Path(raw_root).expanduser().resolve()
-#     except OSError:
-#         return None
-
-#     if not path.exists() or not path.is_dir():
-#         return None
-
-#     return path
-
-
-# def _save_root_to_config(root_path: Path) -> None:
-#     """
-#     persists the current root direcotory into config.yaml
-#     Updats only the root field without affecting other config.
-    
-#     Args:
-#         root_path (Path): The root directory path to save
-#     Raises:
-#         OSError: If there is an issue writing to the config file
-#     returns:
-#         None
-#     """
-#     try:
-#         with CONFIG_FILE.open("r", encoding="utf-8") as file:
-#             config_data = yaml.safe_load(file) or {}
-#     except (OSError, yaml.YAMLError):
-#         config_data = {}
-
-#     directories = config_data.get("directories")
-#     if not isinstance(directories, dict):
-#         directories = {}
-#     directories["root_dir"] = str(root_path)
-#     config_data["directories"] = directories
-
-#     with CONFIG_FILE.open("w", encoding="utf-8") as file:
-#         yaml.safe_dump(config_data, file, sort_keys=False)
-
-
-# _env_root = os.getenv("SLPFS_ROOT")
-# if _env_root:
-#     _current_root = Path(_env_root).expanduser().resolve()
-# else:
-#     _current_root = _load_root_from_config() or Path.cwd().resolve()
-
-# _state = {"root_path": _current_root}
-
-# try:
-#     _save_root_to_config(_current_root)
-# except OSError:
-#     # App can still run with in-memory root even if persistence write fails at startup.
-#     pass
-
-
-
-
-# def get_root() -> Path:
-#     """
-#     Retrieves the current root directory path from the application state.
-    
-#     Returns:
-#         Path: The current root directory path.
-#     """
-#     return _state["root_path"]
-
-
-
-# def set_root(new_root: Path):
-#     """
-#     Updates the current root directory at runtime and persists it
-#     to config.yaml. Also updates the in-memory state for immediate effect.
-    
-#     Args:
-#         new_root (Path): The new root directory path to set.
-#     Raises:
-#         HTTPException: If there is an issue persisting the new root to config.yaml.
-#     Returns:
-#         None
-#     """
-#     try:
-#         _save_root_to_config(new_root)
-#     except OSError as exc:
-#         raise HTTPException(status_code=500, detail="Failed to persist root path to config.yaml") from exc
-#     _state["root_path"] = new_root
-
-
-def validate_root_path(path_str: str) -> Path:
+def _fallback_search_runtime_backup(query: str, k: int) -> list[dict]:
     """
-    Validates a user-provided root path string, ensuring it is non-empty, exists, and is a directory.
+    A simple fallback search implementation that performs a basic filename and content search
+    within the configured root directory. This is used when the main SLPFS runtime search is unavailable.
 
     Args:
-        path_str (str): The root path string to validate.
+        query (str): The search query string.
+        k (int): The maximum number of results to return.
     Returns:
-        Path: The validated root directory path.
-    Raises:
-        HTTPException: If the path is empty, does not exist, or is not a directory.
+        list[dict]: A list of search result dictionaries with file path, score, and preview.
     """
-    if not path_str or not path_str.strip():
-        raise HTTPException(status_code=400, detail="Root path cannot be empty")
-    
-    path = Path(path_str).expanduser().resolve()
+    root_dir = Path(get_root_path()).resolve()
+    query_lower = query.lower()
+    out: list[dict] = []
 
-    if not path.exists():
-        raise HTTPException(status_code=400, detail="Root path does not exist")
+    for file_path in root_dir.rglob("*"):
+        if not file_path.is_file():
+            continue
+        try:
+            name_match = query_lower in file_path.name.lower()
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+            content_lower = content.lower()
+            content_match = query_lower in content_lower
+        except OSError:
+            continue
 
-    if not path.is_dir():
-        raise HTTPException(status_code=400, detail="Root path must be a directory")
-    return path
+        if not name_match and not content_match:
+            continue
+
+        score = 1.0 if name_match else 0.5
+        snippet = ""
+        if content_match:
+            idx = content_lower.find(query_lower)
+            start = max(0, idx - 80)
+            end =min (len(content), idx + len(query) + 80)
+            snippet = content[start:end].replace("\n", " ").replace("\r", " ")
+
+        out.append(
+            {
+                "path": str(file_path),
+                "score": score,
+                "snippet": snippet,
+                "is_dir": False,
+            }
+        )
+        if len(out) >= k:
+            break
+
+    return out
+
+
 
 
 def _resolve_safe_path(raw_path: Optional[str]) -> Path:
@@ -280,57 +188,7 @@ def _resolve_safe_path(raw_path: Optional[str]) -> Path:
         raise HTTPException(status_code=400, detail="Path is outside of the configured root") from exc
     return candidate
 
-# def _fallback_search(query: str, k: int) -> List[SearchResultItem]:
-#     """
-#     Placeholder search function that simulates search results based on filename matching.
-#     In a real implementation, this would interface with the Ollama-based search module.
 
-#     Args:
-#         query (str): The search query string.
-#         k (int): The maximum number of results to return.
-#     Returns:
-#         List[SearchResultItem]: A list of search result items matching the query.
-#     """
-#     current_root = get_root()
-#     query_lower = query.lower()
-#     matches: List[SearchResultItem] = []
-
-#     for file_path in current_root.rglob("*"):
-#         if not file_path.is_file():
-#             continue
-
-#         try:
-#             name_match = query_lower in file_path.name.lower()
-#             content = file_path.read_text(encoding="utf-8", errors="replace")
-#             content_lower = content.lower()
-#             content_match = query_lower in content_lower
-#         except OSError:
-#             continue
-            
-#         if not name_match and not content_match:
-#             continue
-
-#         score = 1.0 if name_match else 0.5
-#         preview = None
-
-#         if content_match:
-#             index = content_lower.find(query_lower)
-#             start = max(0, index - 80)
-#             end = min(len(content), index + len(query) + 80)
-#             preview = content[start:end].replace("\n", " ").replace("\r", " ")
-
-#         matches.append(
-#             SearchResultItem(
-#                 path=str(file_path),
-#                 score=score,
-#                 preview=preview
-#             )
-#         )
-
-#         if len(matches) >= k:
-#             break
-    
-#     return matches
 
 
 # Middleware to add request_id
@@ -349,15 +207,22 @@ async def health_check(request: Request):
     Returns status of backend and dependencies (Ollama, models)
     """
     snapshot = get_runtime_health_snapshot()
+
+    backend_ok = snapshot.get("runtime_ready", False) and not snapshot.get("runtime_error")
+    ollama_ok = snapshot.get("ollama_running", False)
+
     return SuccessResponse(
         ok=True,
         data={
-            "status": "healthy" if snapshot.get("runtime_ready") else "degraded",
+            "status": "healthy" if (backend_ok and ollama_ok) else "degraded",
             "timestamp": datetime.utcnow().isoformat(),
-            "backend": "ready",
-            "runtime_ready": snapshot.get("runtime_ready"),
+            "backend_status": "ok" if backend_ok else ("error" if snapshot.get("runtime_error") else "unknown"),
+            "runtime_loaded": snapshot.get("runtime_ready", False),
+            "ollama_status": "ok" if ollama_ok else "unavailable",
+            "model_status": "ok" if (ollama_ok and snapshot.get("ollama_model")) else "not_available",
+            "indexed_file_count": snapshot.get("indexed_files", 0),
+            "current_root": snapshot.get("root_path"),
             "runtime_error": snapshot.get("runtime_error"),
-            "root_path": snapshot.get("root_path"),
             "ollama_model": snapshot.get("ollama_model"),
             "embedding_model": snapshot.get("embedding_model"),
         },
@@ -365,7 +230,7 @@ async def health_check(request: Request):
     )
 
 
-# Config Endpoint (placeholder)
+# Config Endpoint
 @app.get("/api/v1/config")
 async def get_config(request: Request):
     """Get current configuration"""
@@ -388,18 +253,20 @@ def _update_root_config_response(request: Request, payload: ConfigUpdateRequest)
     Returns:
         SuccessResponse: Standardized API response with updated config data
     """
-    new_root = validate_root_path(payload.root_path)
     try:
-        set_root_path(str(new_root))
+        # Single validation + persistence + runtime rebuild in one call
+        updated_root = set_root_path(payload.root_path)
     except ValueError as exc:
+        # Validation errors from set_root_path
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
+        # Runtime rebuild errors
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return SuccessResponse(
         ok=True,
         data={
-            "root_path": get_root_path(),
+            "root_path": updated_root,
             "max_depth": 10,
         },
         meta=Meta(request_id=request.state.request_id),
@@ -527,24 +394,49 @@ async def read_file(request: Request, payload: FileReadRequest):
 @app.post("/api/v1/search")
 async def search_files(request: Request, payload: SearchRequest):
     """
-    Search for files matching the query within the configured root directory.
-
-    In a real implementation, this would interface with the Ollama-based search module.
+    Search via SLPFS runtime and map results to frontend contract.
+    Optional fallback can be enabled explicitly when runtime is unavailable.
     """
-    # search logic goes here
-
     query = payload.query.strip()
     k = payload.k
+    use_fallback = str(os.getenv("SLPFS_SEARCH_FALLBACK", "0")).lower() in {"1", "true", "yes"}
 
     try:
         runtime = get_runtime()
-        core_result = runtime.search_files(query=query, k=k)
+        core_result = runtime.search_files(query=query, k=k, keywords=None)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if not use_fallback:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        # explicit backup mode only
+        fallback_items = _fallback_search_runtime_backup(query=query, k=k)
+        return SuccessResponse(
+            ok=True,
+            data={
+                "query": query,
+                "total": len(fallback_items),
+                "results": fallback_items,
+            },
+            meta = Meta(request_id=request.state.request_id),
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Search failed") from exc
+    
+    # pass through clear SLPFS failure if present
+    if not core_result.get("success", False):
+        return SuccessResponse(
+            ok=True,
+            data={
+                "query": query,
+                "total": 0,
+                "results": [],
+                "source": "runtime",
+                "search_status": "failed",
+                "error": core_result.get("error", "Search failed "),
+            },
+            meta=Meta(request_id=request.state.request_id),
+        )
 
     results = core_result.get("results", [])
 
@@ -562,6 +454,8 @@ async def search_files(request: Request, payload: SearchRequest):
                 }
                 for item in results
             ],
+            "source": "runtime",
+            "search_status": "ok",
         },
         meta=Meta(request_id=request.state.request_id),
     )
@@ -570,8 +464,8 @@ async def search_files(request: Request, payload: SearchRequest):
 @app.post("/api/v1/command")
 async def run_command(request: Request, payload: CommandRequest):
     """
-    Unified text endpoint for command-like and search-like inputs.
-    Returns a structured placeholder for command parsing until real SLPFS parser is wired.
+    Excute natural language commands through SLPFS runtime and return
+    a normalized API envelop for success/failure outcomes.
     """
     text = payload.text.strip()
 
@@ -584,6 +478,25 @@ async def run_command(request: Request, payload: CommandRequest):
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Command execution failed") from exc
+    
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=502, detail = "Invalid command response from runtime")
+    
+    success = bool(result.get("success"))
+    error_message = str(result.get("error") or "")
+    lowered_error = error_message.lower()
+
+    if success:
+        command_status = "success"
+        reason = None
+    else:
+        command_status = "failed"
+        if "could not understand command" in lowered_error:
+            reason = "low confidence"
+        elif "llm" in lowered_error or "ollama" in lowered_error or "request failed" in lowered_error:
+            reason = "llm error"
+        else:
+            reason = "execution error"
 
     return SuccessResponse(
         ok=True,
@@ -591,13 +504,17 @@ async def run_command(request: Request, payload: CommandRequest):
             "kind": "command",
             "input": text,
             "intent": "command",
-            "message": result.get("summary") or result.get("message") or "",
+            "command_status": command_status,
+            "reason": reason,
+            "message": result.get("summary") or result.get("message") or error_message or "",
             "parsed": {
                 "raw": text,
                 "action": result.get("operation", ""),
                 "args": result.get("parameters", {}),
             },
             "results": result.get("results", []),
+            "slpfs_success": success,
+            "slpfs_error": error_message or None,
         },
         meta=Meta(request_id=request.state.request_id),
     )
