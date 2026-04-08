@@ -1,8 +1,8 @@
 directories:
-  root_dir: C:\Users\Omsai\Downloads
+  root_dir: C:\Users\Omsai\Desktop\lsfs_test
   vector_db_dir: ./.lsfs_db
 ollama:
-  model: qwen3:14b
+  model: qwen2.5:3b
   url: http://localhost:11434
 embedding:
   model: all-mpnet-base-v2

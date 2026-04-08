@@ -69,12 +69,16 @@ export interface CommandResultItem {
 interface CommandResponse {
   ok: boolean;
   data: {
-    kind: "command_placeholder" | "search";
+    kind: "command" | "search" | "command_placeholder";
     input: string;
     intent: "command" | "search";
     message: string;
-    parsed: { raw: string; action: string; args: string[] } | null;
+    parsed: { raw: string; action: string; args: Record<string, unknown> } | null;
     results: CommandResultItem[];
+    command_status?: "success" | "failed";
+    reason?: string | null;
+    slpfs_error?: string | null;
+    ollama_output?: string | null;
   };
   error?: { code?: string; message?: string; details?: unknown } | null;
   meta?: unknown;

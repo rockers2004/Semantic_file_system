@@ -9,6 +9,7 @@ rich==13.7.0
 
 # Utilities
 numpy==1.24.3
+pypdf==5.4.0
 
 # Optional:  For better tokenization
 nltk==3.8.1

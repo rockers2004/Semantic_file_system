@@ -110,6 +110,9 @@ class ConfigUpdateRequest(BaseModel):
     root_path: str
 
 
+MAX_TEXT_PREVIEW_BYTES = 1_000_000
+
+
 
 def _fallback_search_runtime_backup(query: str, k: int) -> list[dict]:
     """
@@ -372,12 +375,29 @@ async def read_file(request: Request, payload: FileReadRequest):
     if not target.is_file():
         raise HTTPException(status_code=400, detail="Path is a directory, not a file")
 
+    stat = target.stat()
+
+    if target.suffix.lower() == ".pdf":
+        raise HTTPException(
+            status_code=415,
+            detail="PDF text preview is disabled in API. Open the file with a system app.",
+        )
+
+    if stat.st_size > MAX_TEXT_PREVIEW_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File is too large for preview (>{MAX_TEXT_PREVIEW_BYTES} bytes)",
+        )
+
     try:
-        content = target.read_text(encoding="utf-8", errors="replace")
+        raw = target.read_bytes()
     except OSError as exc:
         raise HTTPException(status_code=500, detail="Unable to read file") from exc
 
-    stat = target.stat()
+    if b"\x00" in raw:
+        raise HTTPException(status_code=415, detail="Binary file preview is not supported")
+
+    content = raw.decode("utf-8", errors="replace")
 
     return SuccessResponse(
         ok=True,
@@ -498,6 +518,31 @@ async def run_command(request: Request, payload: CommandRequest):
         else:
             reason = "execution error"
 
+    raw_results = result.get("results", [])
+    command_results = []
+    if isinstance(raw_results, list):
+        for item in raw_results:
+            if not isinstance(item, dict):
+                continue
+            path = (
+                item.get("path")
+                or item.get("file_path")
+                or item.get("relative_path")
+                or ""
+            )
+            file_name = item.get("file_name") or ""
+            preview = item.get("snippet") or item.get("preview") or ""
+            if not preview:
+                preview = f"{file_name} | {path}".strip(" |")
+            command_results.append(
+                {
+                    "path": path,
+                    "score": float(item.get("score", 0.0) or 0.0),
+                    "snippet": preview,
+                    "is_dir": False,
+                }
+            )
+
     return SuccessResponse(
         ok=True,
         data={
@@ -512,9 +557,10 @@ async def run_command(request: Request, payload: CommandRequest):
                 "action": result.get("operation", ""),
                 "args": result.get("parameters", {}),
             },
-            "results": result.get("results", []),
+            "results": command_results,
             "slpfs_success": success,
             "slpfs_error": error_message or None,
+            "ollama_output": result.get("ollama_output"),
         },
         meta=Meta(request_id=request.state.request_id),
     )

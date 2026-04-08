@@ -134,35 +134,78 @@ def set_root_path(new_root: str) -> str:
 
 
 def get_runtime_health_snapshot() -> dict[str, Any]:
-    """Return a lightweight runtime health snapshot for API status endpoints."""
+    """Return a stable runtime health snapshot for API status endpoints."""
     with _lock:
         runtime = _state["runtime"]
-        snapshot = {
-            "runtime_ready": runtime is not None,
-            "runtime_error": _state["runtime_error"],
-            "config_path": str(CONFIG_PATH),
-            "root_path": str(runtime.root_dir) if runtime else None,
-            "ollama_model": runtime.config.ollama_model if runtime else None,
-            "embedding_model": runtime.config.embedding_model if runtime else None,
-        }
-        # if runtime exists, get detailed stats
-        if runtime:
-            try:
-                stats = runtime.get_stats()
-                snapshot["indexed_files"] = stats.get("indexed_files", 0)
-                snapshot["total_files"] = stats.get("total_files", 0)
-                snapshot["root_directory"] = stats.get("root_directory")
-            except Exception as e:
-                snapshot["stats_error"] = str(e)
-                logger.warning("Failed to get runtime stats", exc_info=True)
+        runtime_error = _state["runtime_error"]
 
-            try:
-                ollama_ok = runtime.llm._test_connection()
-                snapshot["ollama_running"] = ollama_ok
-            except Exception as e:
-                snapshot["ollama_error"] = str(e)
-                snapshot["ollama_running"] = False
-                logger.warning("Failed to test Ollama connection", exc_info=True)
+        snapshot = {
+            "backend": "degraded",
+            "runtime_loaded": runtime is not None,
+            "root_path": str(runtime.root_dir) if runtime else None,
+            "ollama_status": "unavailable",
+            "model_status": "unknown",
+            "vector_store_status": "error",
+            "indexed_files": 0,
+            "reindex_required": True,
+            "runtime_error": runtime_error,
+        }
+
+        if runtime is None:
+            return snapshot
+
+        total_files = None
+
+        # Vector store status + indexed files
+        try:
+            stats = runtime.get_stats()
+            indexed = int(stats.get("indexed_files", 0) or 0)
+            snapshot["indexed_files"] = indexed
+            snapshot["vector_store_status"] = "ready"
+
+            total_files_raw = stats.get("total_files")
+            if isinstance(total_files_raw, int):
+                total_files = total_files_raw
+        except Exception as exc:
+            snapshot["vector_store_status"] = "error"
+            if not snapshot["runtime_error"]:
+                snapshot["runtime_error"] = f"Vector store stats failed: {exc}"
+
+        # Ollama status
+        try:
+            ollama_ok = bool(runtime.llm._test_connection())
+            snapshot["ollama_status"] = "ready" if ollama_ok else "unavailable"
+        except Exception as exc:
+            snapshot["ollama_status"] = "error"
+            if not snapshot["runtime_error"]:
+                snapshot["runtime_error"] = f"Ollama health check failed: {exc}"
+
+        # Model status
+        model_name = str(getattr(runtime.config, "ollama_model", "") or "").strip()
+        if not model_name:
+            snapshot["model_status"] = "missing"
+        elif snapshot["ollama_status"] == "ready":
+            snapshot["model_status"] = "ready"
+        else:
+            snapshot["model_status"] = "unknown"
+
+        # Reindex requirement
+        if snapshot["vector_store_status"] == "ready" and isinstance(total_files, int):
+            snapshot["reindex_required"] = snapshot["indexed_files"] < total_files
+        else:
+            snapshot["reindex_required"] = True
+
+        # Backend aggregate
+        if (
+            snapshot["runtime_loaded"]
+            and snapshot["ollama_status"] == "ready"
+            and snapshot["vector_store_status"] == "ready"
+            and not snapshot["runtime_error"]
+        ):
+            snapshot["backend"] = "ready"
+        else:
+            snapshot["backend"] = "degraded"
+
         return snapshot
 
 

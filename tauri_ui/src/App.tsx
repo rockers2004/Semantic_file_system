@@ -119,11 +119,6 @@ function App() {
 
         <UnifiedInput setSelectedFile={setSelectedFile} />
 
-        <div className="selected-file-card">
-          <strong>Selected file:</strong>
-          <p>{selectedFile || "No file selected yet"}</p>
-        </div>
-
         <FilePreview selectedPath={selectedFile} />
       </main>
     </div>

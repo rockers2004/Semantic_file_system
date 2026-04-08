@@ -41,7 +41,8 @@ class LocalSLPFS:
         # Initialize components
         self.vector_store = VectorStore(
             config.vector_db_dir,
-            config.embedding_model
+            config.embedding_model,
+            config.max_file_size_mb,
         )
         
         self.llm = OllamaHandler(
@@ -322,25 +323,52 @@ class LocalSLPFS:
         
         # Parse command with LLM
         parsed = self.llm.parse_command(user_input)
+        raw_ollama_output = (
+            parsed.get('raw_ollama_output')
+            or parsed.get('parameters', {}).get('raw_ollama_output')
+        )
 
         # Surface LLM/connection errors directly
         if parsed.get('operation') == 'error':
             return {
                 "success": False,
-                "error": parsed.get('parameters', {}).get('message', 'LLM request failed')
+                "error": parsed.get('parameters', {}).get('message', 'LLM request failed'),
+                "ollama_output": raw_ollama_output,
             }
         
         if parsed['confidence'] < 0.5:
             return {
                 "success":  False,
-                "error": "Could not understand command.  Try 'help' for examples."
+                "error": "Could not understand command.  Try 'help' for examples.",
+                "ollama_output": raw_ollama_output,
             }
         
         operation = parsed['operation']
+        # Normalize common aliases from model output.
+        operation_aliases = {
+            "find": "search",
+            "remove": "delete",
+            "mkdir": "create_dir",
+            "make_dir": "create_dir",
+        }
+        operation = operation_aliases.get(operation, operation)
         params = parsed. get('parameters', {})
+
+        if operation == 'chat':
+            return {
+                "success": True,
+                "message": params.get('message', 'I can help with file operations and search.'),
+                "operation": operation,
+                "parameters": params,
+                "results": [],
+                "ollama_output": raw_ollama_output,
+            }
         
         # Execute operation
         result = self._execute_operation(operation, params)
+        result['operation'] = operation
+        result['parameters'] = params
+        result['ollama_output'] = raw_ollama_output
         
         # Generate friendly response
         if result. get('success'):

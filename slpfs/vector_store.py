@@ -24,14 +24,26 @@ import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
+try:
+    from pypdf import PdfReader
+except ImportError:
+    PdfReader = None
+
     
 logger = logging.getLogger(__name__)
 
-class VectorStore: 
+
+INDEX_SCHEMA_VERSION = 3
+MAX_EMBED_CHARS = 50000
+LARGE_PDF_MAX_PAGES = 40
+
+
+class VectorStore:
     """Handles embeddings and semantic search using ChromaDB"""
     
-    def __init__(self, db_path: str, embedding_model: str):
+    def __init__(self, db_path: str, embedding_model: str, max_file_size_mb: int = 10):
         logger.info("Initializing vector store at %s...", db_path)
+        self.max_file_size_mb = max_file_size_mb
         
         # Initialize ChromaDB with persistent storage
         self.client = chromadb.PersistentClient(
@@ -56,13 +68,50 @@ class VectorStore:
         """Generate unique ID for file"""
         return hashlib.md5(file_path.encode()).hexdigest()
     
-    def _read_file_content(self, file_path: str, max_size_mb: int = 10) -> Optional[str]:
+    def _read_pdf_content(self, file_path: str, max_pages: Optional[int] = None) -> Optional[str]:
+        """Extract text content from PDF files."""
+        if PdfReader is None:
+            logger.error("pypdf is not installed; cannot index PDF: %s", file_path)
+            return "[PDF parsing unavailable: install pypdf]"
+
+        try:
+            reader = PdfReader(file_path)
+            pages_text: List[str] = []
+            for idx, page in enumerate(reader.pages):
+                if max_pages is not None and idx >= max_pages:
+                    break
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    pages_text.append(page_text)
+
+            if not pages_text:
+                return "[Empty PDF or scanned PDF with no extractable text]"
+
+            return "\n\n".join(pages_text)
+        except Exception as e:
+            logger.error("Error reading PDF %s: %s", file_path, e)
+            return f"[Error reading PDF: {str(e)}]"
+
+    def _read_file_content(self, file_path: str) -> Optional[str]:
         """Safely read file content"""
         try:
+            _, ext = os.path.splitext(file_path)
+
             # Check file size
             file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-            if file_size_mb > max_size_mb:
+            if file_size_mb > self.max_file_size_mb and ext.lower() != ".pdf":
                 return f"[Large file: {file_size_mb:.2f}MB - content not indexed]"
+
+            if ext.lower() == ".pdf":
+                if file_size_mb > self.max_file_size_mb:
+                    logger.warning(
+                        "Large PDF detected (%s MB). Indexing first %s pages only: %s",
+                        round(file_size_mb, 2),
+                        LARGE_PDF_MAX_PAGES,
+                        file_path,
+                    )
+                    return self._read_pdf_content(file_path, max_pages=LARGE_PDF_MAX_PAGES)
+                return self._read_pdf_content(file_path)
             
             # Try to read as text
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -87,7 +136,12 @@ class VectorStore:
                     meta = existing.get("metadatas", [[]])[0][0] if existing.get("metadatas") else {}
                     stored_size = int(meta.get("size_bytes", -1)) if meta else -1
                     stored_mtime = float(meta.get("modified_ts", -1)) if meta else -1
-                    if stored_size == current_size and abs(stored_mtime - current_mtime) < 1e-6:
+                    stored_schema_version = int(meta.get("index_schema_version", 0)) if meta else 0
+                    if (
+                        stored_schema_version == INDEX_SCHEMA_VERSION
+                        and stored_size == current_size
+                        and abs(stored_mtime - current_mtime) < 1e-6
+                    ):
                         return "unchanged"
             except Exception:
                 # If lookup fails, fall through to reindex
@@ -99,7 +153,8 @@ class VectorStore:
                 return "error"
             
             # Generate embedding
-            embedding = self.embedding_model.encode(content).tolist()
+            embed_content = content if len(content) <= MAX_EMBED_CHARS else content[:MAX_EMBED_CHARS]
+            embedding = self.embedding_model.encode(embed_content).tolist()
             
             # Prepare metadata
             relative_path = os.path.relpath(file_path, root_dir)
@@ -109,6 +164,7 @@ class VectorStore:
                 "file_name": os.path.basename(file_path),
                 "file_type": mimetypes.guess_type(file_path)[0] or "unknown",
                 "indexed_at": datetime.now().isoformat(),
+                "index_schema_version": INDEX_SCHEMA_VERSION,
                 "size_bytes": current_size,
                 "modified_ts": current_mtime,
             }

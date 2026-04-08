@@ -8,7 +8,7 @@ This module is responsible for:
 
 - Connecting to and validating a local Ollama service
 - Translating natural-language user input into structured file-system commands
-- Extracting and validating JSON payloads from model responses
+- 
 - Generating friendly natural-language summaries of operation results
 
 Primary components:
@@ -91,6 +91,12 @@ Available operations:
 - copy: Copy a file (params: source, destination)
 - reindex: Re-index all files (no params)
 - stats: Show system statistics (no params)
+- chat: Normal conversation/small talk/non-filesystem query (params: message)
+
+Important rules:
+- If user text is conversational (greeting, small talk, general question), return operation "chat".
+- Do NOT force filesystem operations for normal conversation.
+- Use filesystem operations only when user clearly asks for file actions.
 
 Return ONLY valid JSON in this format:
 {
@@ -122,7 +128,10 @@ User: "copy notes.txt to backup/notes.txt"
 {"operation": "copy", "parameters": {"source": "notes.txt", "destination": "backup/notes.txt"}, "confidence": 0.9}
 
 User: "delete old_file.txt"
-{"operation": "delete", "parameters": {"file_name": "old_file.txt"}, "confidence": 0.9}"""
+{"operation": "delete", "parameters": {"file_name": "old_file.txt"}, "confidence": 0.9}
+
+User: "hello how are you"
+{"operation": "chat", "parameters": {"message": "Hello! I am doing well. How can I help with your files today?"}, "confidence": 0.95}"""
 
         try:
             # Call Ollama
@@ -151,17 +160,56 @@ User: "delete old_file.txt"
                 json_str = _extract_first_json_block(content)
                 if json_str:
                     try:
-                        return json.loads(json_str)
+                        parsed = json.loads(json_str)
+                        if isinstance(parsed, dict):
+                            parsed["raw_ollama_output"] = content
+                            return parsed
+                        return {
+                            "operation": "error",
+                            "parameters": {
+                                "message": "Parsed JSON is not an object",
+                                "raw_ollama_output": content,
+                            },
+                            "confidence": 0.0,
+                        }
                     except json.JSONDecodeError as e:
-                        return {"operation": "error", "parameters": {"message": f"Parse error: {e}"}, "confidence": 0.0}
+                        return {
+                            "operation": "error",
+                            "parameters": {
+                                "message": f"Parse error: {e}",
+                                "raw_ollama_output": content,
+                            },
+                            "confidence": 0.0,
+                        }
                 else:
-                    return {"operation": "error", "parameters": {"message": "No JSON found in LLM response"}, "confidence": 0.0}
+                    return {
+                        "operation": "error",
+                        "parameters": {
+                            "message": "No JSON found in LLM response",
+                            "raw_ollama_output": content,
+                        },
+                        "confidence": 0.0,
+                    }
             
-            return {"operation": "error", "parameters": {"message": "LLM request failed"}, "confidence": 0.0}
+            return {
+                "operation": "error",
+                "parameters": {
+                    "message": "LLM request failed",
+                    "raw_ollama_output": None,
+                },
+                "confidence": 0.0,
+            }
         
         except Exception as e:
             logger.exception("LLM parsing error")
-            return {"operation": "error", "parameters": {"message": str(e)}, "confidence": 0.0}
+            return {
+                "operation": "error",
+                "parameters": {
+                    "message": str(e),
+                    "raw_ollama_output": None,
+                },
+                "confidence": 0.0,
+            }
     
     def summarize_results(self, operation: str, results: Any) -> str:
         """Generate natural language summary of results"""
