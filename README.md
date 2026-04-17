@@ -1,260 +1,326 @@
-# Local LSFS - Semantic File System
+# Semantic File System
 
-A natural language-powered file system that uses local LLMs (Large Language Models) to intelligently search, organize, and manage files. Ask questions in plain English and get results based on semantic understanding of your file contents.
+Local-first semantic search and natural-language file operations powered by Ollama, ChromaDB, and a Python backend, with both Terminal and Tauri desktop UI workflows.
 
-## Overview
+## What This Project Includes
 
-**Local LSFS** (Local Large Language Model Semantic File System) is a Python-based application that combines:
-- **Local LLMs** (via Ollama) - Process files without sending data to the cloud
-- **Vector Embeddings** - Create semantic understanding of file content
-- **Natural Language Interface** - Query files using plain English
-- **Fast Search** - Find files by meaning, not just keywords
+- Python semantic runtime (SLPFS) for indexing, search, and NL command execution
+- FastAPI backend service used by the desktop app
+- Tauri + React frontend for file tree, chat/search, and preview UX
+- Optional multimodal indexing/search pipeline (Semantixel)
+- Config-driven local setup through a single config file
 
-## Key Features
+## Architecture
 
-✨ **Natural Language Search** - Search files using natural language queries  
-🔒 **Privacy-First** - Runs completely locally, no cloud dependencies  
-⚡ **Fast Embeddings** - Uses lightweight `all-MiniLM-L6-v2` model  
-🤖 **Local LLM Support** - Works with Ollama and any compatible model  
-💾 **Vector Database** - ChromaDB for efficient semantic search  
-🎨 **Interactive Terminal UI** - Beautiful CLI interface with Rich formatting  
+1. User submits a search or command from Terminal or UI.
+2. Backend routes requests to runtime services.
+3. Files are indexed to vectors using sentence-transformers.
+4. ChromaDB returns semantic matches.
+5. Ollama-powered LLM handles intent/command parsing and response shaping.
+
+Primary paths:
+- `slpfs/` core semantic file system runtime
+- `semantixel/` multimodal services
+- `backend_api/app/` FastAPI API layer and runtime management
+- `tauri_ui/` desktop app frontend (React + Tauri)
 
 ## Prerequisites
 
-Before you start, ensure you have:
+Required on all OS:
 
-- **Python 3.8+** installed
-- **Ollama** installed and running locally ([Download here](https://ollama.ai))
-- A local LLM model (e.g., `qwen2.5:0.5b-instruct` or your preferred model)
+- Python 3.10+ (3.11 recommended)
+- Node.js 18+ and npm
+- Ollama installed and available in PATH
+- Git
 
-### Check Ollama Setup
+For Tauri desktop development, install Rust toolchain:
+
+- Rustup + stable Rust + Cargo
+
+Install Rust toolchain:
 
 ```bash
-# Start Ollama service
-ollama serve
-
-# In another terminal, pull a model (if not already done)
-ollama pull qwen2.5:0.5b-instruct
+rustup default stable
 ```
 
-## Installation
+Install and start Ollama, then pull a model:
 
-### 1. Clone the Repository
+```bash
+ollama serve
+```
+
+In another terminal:
+
+```bash
+ollama pull qwen2.5:3b
+```
+
+## OS Setup and Run Commands
+
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/taslim121/Semantic_file_system.git
+cd Semantic_file_system
+
+python -m venv myenv
+.\myenv\Scripts\Activate.ps1
+
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install -r backend_api\requirements.txt
+# Optional multimodal dependencies:
+pip install -r requirements-multimodal-phase1.txt
+
+cd tauri_ui
+npm install
+cd ..
+```
+
+Start backend API:
+
+```powershell
+.\myenv\Scripts\Activate.ps1
+python -m uvicorn backend_api.app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Start Tauri UI (new terminal):
+
+```powershell
+cd tauri_ui
+npm run tauri dev
+```
+
+Optional Terminal UI:
+
+```powershell
+.\myenv\Scripts\Activate.ps1
+python terminal.py
+```
+
+### macOS (zsh/bash)
 
 ```bash
 git clone https://github.com/taslim121/Semantic_file_system.git
-cd local-lsfs
-```
+cd Semantic_file_system
 
-### 2. Create a Virtual Environment (Recommended)
+python3 -m venv myenv
+source myenv/bin/activate
 
-```bash
-# On Windows
-python -m venv venv
-venv\Scripts\activate
-
-# On macOS/Linux
-python -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
+pip install --upgrade pip
 pip install -r requirements.txt
+pip install -r backend_api/requirements.txt
+# Optional multimodal dependencies:
+pip install -r requirements-multimodal-phase1.txt
+
+cd tauri_ui
+npm install
+cd ..
 ```
 
-If you want Semantixel multimodal search enabled, also install:
+Start backend API:
 
 ```bash
-pip install -r requirements-multimodal-phase1.txt
+source myenv/bin/activate
+python -m uvicorn backend_api.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-**Dependencies:**
-- `chromadb==0.4.22` - Vector database for embeddings
-- `sentence-transformers==2.3.1` - Lightweight embedding model
-- `requests==2.31.0` - HTTP client for Ollama API
-- `prompt-toolkit==3.0.43` - Interactive terminal input
-- `rich==13.7.0` - Beautiful terminal formatting
-- `numpy==1.24.3` - Numerical operations
-- `nltk==3.8.1` - Natural language utilities
+Start Tauri UI (new terminal):
+
+```bash
+cd tauri_ui
+npm run tauri dev
+```
+
+Optional Terminal UI:
+
+```bash
+source myenv/bin/activate
+python terminal.py
+```
+
+### Linux (Ubuntu/Debian)
+
+System packages commonly needed for Tauri/WebKit:
+
+```bash
+sudo apt update
+sudo apt install -y build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+Then project setup:
+
+```bash
+git clone https://github.com/taslim121/Semantic_file_system.git
+cd Semantic_file_system
+
+python3 -m venv myenv
+source myenv/bin/activate
+
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install -r backend_api/requirements.txt
+# Optional multimodal dependencies:
+pip install -r requirements-multimodal-phase1.txt
+
+cd tauri_ui
+npm install
+cd ..
+```
+
+Start backend API:
+
+```bash
+source myenv/bin/activate
+python -m uvicorn backend_api.app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Start Tauri UI (new terminal):
+
+```bash
+cd tauri_ui
+npm run tauri dev
+```
+
+Optional Terminal UI:
+
+```bash
+source myenv/bin/activate
+python terminal.py
+```
 
 ## Configuration
 
-Edit `config.yaml` to customize your setup:
+Edit `config.yaml` before first use.
+
+Current important keys:
+
+- `directories.root_dir`: folder to index and operate on
+- `directories.vector_db_dir`: local Chroma storage
+- `ollama.model`: LLM model (currently `qwen2.5:3b`)
+- `ollama.url`: Ollama server URL (default local)
+- `embedding.model`: embedding model name
+- `multimodal.enabled`: toggle multimodal indexing/search
+- `multimodal.db_path`: multimodal vector DB path
+
+Example:
 
 ```yaml
-# Root directory to index and search
-root_dir: "C:/Users/YourUser/Desktop/your-folder"
+directories:
+  root_dir: C:\Users\YourUser\Desktop\your_folder
+  vector_db_dir: ./.lsfs_db
 
-# Where ChromaDB stores vector data
-vector_db_dir: "./.lsfs_db"
-
-# LLM Settings
 ollama:
-  model: "qwen2.5:0.5b-instruct"        # Change to your preferred model
-  url: "http://localhost:11434"    # Ollama server address
+  model: qwen2.5:3b
+  url: http://localhost:11434
 
-# Embedding model (lightweight, ~80MB)
 embedding:
-  model: "all-MiniLM-L6-v2"
+  model: all-mpnet-base-v2
 
-# Search Settings
 search:
-  default_results: 5               # Number of results to return
-  max_file_size_mb: 10            # Skip files larger than this
+  default_results: 5
+  max_file_size_mb: 10
 
-# Performance
-performance:
-  enable_caching: true
+multimodal:
+  enabled: true
+  db_path: ./db_multimodal
 ```
 
-### Configuration Options
+## Running Modes
 
-| Setting | Purpose | Default |
-|---------|---------|---------|
-| `root_dir` | The folder to index and search | Desktop test folder |
-| `vector_db_dir` | Vector database storage location | `./.lsfs_db` |
-| `ollama.model` | LLM model to use | `tinyllama:latest` |
-| `embedding.model` | Embedding model | `all-MiniLM-L6-v2` |
-| `search.default_results` | Results per query | 5 |
-| `max_file_size_mb` | File size limit for indexing | 10 MB |
+### 1) API + Desktop UI (recommended)
 
-## Usage
+- Start Ollama
+- Start backend API
+- Start Tauri app
 
-### Start the Interactive Terminal
+This mode is best for daily use.
+
+### 2) Terminal-Only Mode
 
 ```bash
 python terminal.py
 ```
 
-You'll see a welcome banner and a prompt where you can enter natural language queries.
+Useful for debugging backend behavior without UI.
 
-### Example Queries
+## API Endpoints (MVP)
 
-```
-> Search for Python files about machine learning
-> Find configuration files
-> Show me all JSON files related to API
-> List recently modified files
-> Find duplicate content across files
+Base URL:
+
+```text
+http://127.0.0.1:8000/api/v1
 ```
 
-### Available Commands
+Key endpoints:
 
-- **`search <query>`** - Search files by natural language
-- **`index`** - Re-index the entire root directory
-- **`status`** - Show current database status
-- **`help`** - Show available commands
-- **`exit` or `quit`** - Exit the application
-
-## Project Structure
-
-```
-local-lsfs/
-├── README.md                      # This file
-├── config.yaml                    # Configuration file
-├── requirements.txt               # Python dependencies
-├── terminal.py                    # Main CLI interface
-├── lsfs/
-│   ├── ___init___.py             # Package initialization
-│   ├── config.py                 # Configuration dataclass
-│   ├── config_loader.py          # YAML config loader
-│   ├── file_system.py            # Core LSFS logic
-│   ├── llm_handler.py            # Ollama integration
-│   └── vector_store.py           # ChromaDB wrapper
-├── lsfs_root/                    # Test directory
-└── .lsfs_db/                     # Vector database (auto-created)
-```
-
-## How It Works
-
-1. **Indexing** - Files are read and split into chunks
-2. **Embedding** - Each chunk is converted to a vector using `sentence-transformers`
-3. **Storage** - Vectors are stored in ChromaDB
-4. **Query** - User queries are embedded and matched against stored vectors
-5. **Re-ranking** - Results are re-ranked using the local LLM
+- `GET /health`
+- `GET /config`
+- `PUT /config`
+- `PUT /config/root`
+- `POST /search`
+- `POST /command`
+- `GET /tree`
+- `POST /file/read`
+- `POST /index/start`
+- `GET /index/status`
+- `POST /index/cancel`
 
 ## Troubleshooting
 
-### "Connection refused" Error
+### Ollama not reachable
 
-```
-Error: Could not connect to Ollama at http://localhost:11434
+```text
+Connection refused / model unavailable
 ```
 
-**Solution:** Make sure Ollama is running:
+Fix:
+
 ```bash
 ollama serve
+ollama pull qwen2.5:3b
 ```
 
-### Model Not Found
+### Backend import errors
 
-```
-Error: Model 'tinyllama:latest' not found
+Make sure virtual environment is active and dependencies are installed from both requirement files.
+
+### Tauri build issues
+
+- Confirm Rust is installed: `rustc --version`
+- Confirm Node/npm are installed: `node -v` and `npm -v`
+- On Linux, install missing system packages for WebKit/GTK
+
+### Reset vector stores
+
+Windows PowerShell:
+
+```powershell
+Remove-Item -Recurse -Force .lsfs_db, db_multimodal
 ```
 
-**Solution:** Pull the model from Ollama:
+macOS/Linux:
+
 ```bash
-ollama pull tinyllama:latest
+rm -rf .lsfs_db db_multimodal
 ```
 
-### Out of Memory
+## Recommended Ollama Models
 
-If your system is slow, try a smaller model:
-```bash
-ollama pull phi:latest          # Smaller, faster
-```
+- Balanced default: `qwen2.5:3b`
+- Better quality (if resources allow): `qwen2.5:7b`
+- Alternative general model: `llama3.1:8b`
 
-### Vector Database Issues
+Update the model in `config.yaml`, then restart backend.
 
-To reset the vector database:
-```bash
-rm -rf .lsfs_db              # On macOS/Linux
-rmdir /s .lsfs_db            # On Windows
-```
+## Developer Notes
 
-Then restart the application.
-
-## Performance Tips
-
-1. **Use smaller models** for faster responses (phi, tinyllama)
-2. **Limit file size** in config to avoid processing large files
-3. **Enable caching** in config for repeated queries
-4. **Index once** and reuse the vector database
-5. **Allocate RAM** to Ollama for faster LLM processing
-
-## Future Enhancements
-
-- [ ] Support for more file types (images, videos)
-- [ ] Multi-language support
-- [ ] Batch file operations
-- [ ] File modification tracking
-- [ ] Export search results
-- [ ] Web UI interface
-- [ ] Redis caching support
+- Backend API entrypoint: `backend_api/app/main.py`
+- UI scripts: `tauri_ui/package.json`
+- Contract and planning docs:
+  - `backend-contract.md`
+  - `tauri-implementation-plan.md`
 
 ## License
 
-This project is open source. See the repository for license details.
-
-## Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## Support
-
-For issues, questions, or suggestions:
-- Open an issue on GitHub: [Semantic_file_system](https://github.com/taslim121/Semantic_file_system)
-- Check existing issues for solutions
-
-## Acknowledgments
-
-- **Ollama** - Local LLM inference
-- **ChromaDB** - Vector database
-- **Sentence Transformers** - Embedding models
-- **Rich** - Beautiful terminal output
+Use according to repository license and applicable third-party dependency licenses.
