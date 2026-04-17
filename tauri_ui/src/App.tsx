@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { StartupScreen } from "./components/StartupScreen";
 import { FileTree } from "./components/FileTree";
 import { FilePreview } from "./components/FilePreview";
@@ -16,6 +17,13 @@ function App() {
   const [rootError, setRootError] = useState("");
   const [isUpdatingRoot, setIsUpdatingRoot] = useState(false);
   const [treeRefreshToken, setTreeRefreshToken] = useState(0);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  useEffect(() => {
+    if (selectedFile) {
+      setIsPreviewOpen(true);
+    }
+  }, [selectedFile]);
 
   useEffect(() => {
     if (!backendReady) {
@@ -114,16 +122,25 @@ function App() {
 
       <main className="main-panel">
         <header className="main-header">
-          <h1>What are you looking for?</h1>
-          <p>Just type what you need. We'll find the right files or do the task for you.</p>
+          <div className="main-header-titles">
+            <h1>What are you looking for?</h1>
+            <p>Just type what you need. We'll find the right files or do the task for you.</p>
+          </div>
+          <button className="btn-icon preview-toggle" onClick={() => setIsPreviewOpen(!isPreviewOpen)} title="Toggle Preview">
+            {isPreviewOpen ? <PanelRightClose size={20} /> : <PanelRightOpen size={20} />}
+          </button>
         </header>
 
-        <div className="search-arena">
-          <UnifiedInput setSelectedFile={setSelectedFile} />
-        </div>
+        <div className="content-split-area">
+          <div className={`search-arena ${isPreviewOpen ? 'with-preview' : ''}`}>
+            <UnifiedInput setSelectedFile={setSelectedFile} />
+          </div>
 
-        <div className="preview-arena">
-          <FilePreview selectedPath={selectedFile} />
+          {isPreviewOpen && (
+            <div className="preview-arena">
+              <FilePreview selectedPath={selectedFile} />
+            </div>
+          )}
         </div>
       </main>
     </div>

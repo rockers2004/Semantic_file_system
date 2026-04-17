@@ -185,60 +185,14 @@ body, html {
   overflow: hidden;
 }
 
-.main-header {
-  margin-bottom: 24px;
-  text-align: center;
-}
 
-.main-header h1 {
-  font-size: 28px;
-  font-weight: 600;
-  margin: 0 0 8px 0;
-}
 
-.main-header p {
-  color: var(--text-dim);
-  font-size: 15px;
-  margin: 0;
-}
 
-.search-arena {
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
 
-.unified-input-panel {
-  background: var(--bg-panel);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 24px;
-  flex: 1;
-}
 
-.unified-input-body {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
 
-.chat-thread {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-bottom: 24px;
-  padding-right: 8px;
-}
+
+
 
 .chat-bubble {
   max-width: 85%;
@@ -431,21 +385,9 @@ body, html {
   text-decoration: underline;
 }
 
-.preview-arena {
-  width: 100%;
-  max-width: 800px;
-  margin: 24px auto 0;
-}
 
-.file-preview-panel {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 24px;
-  height: 300px;
-  display: flex;
-  flex-direction: column;
-}
+
+
 
 .file-preview-header h3 {
   margin: 0 0 8px;
@@ -690,4 +632,231 @@ body, html {
 .neo-file-tree-panel {
   background-color: #0f0f0f !important;
   border-bottom-color: #222 !important;
+}
+
+/* Layout updates for split content */
+
+.main-header-titles {
+  flex: 1;
+  text-align: left;
+}
+
+.main-header-titles h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.main-header-titles p {
+  color: var(--text-dim);
+  font-size: 15px;
+  margin: 0;
+}
+
+.preview-toggle {
+  margin-top: 4px;
+}
+
+.content-split-area {
+  display: flex;
+  gap: 24px;
+  flex: 1;
+  min-height: 0; /* needed for flex scrolling */
+  width: 100%;
+}
+
+
+.search-arena.with-preview {
+  max-width: 50%;
+}
+
+/* Reduced Unified Input size nicely */
+
+
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+
+/* Layout updates for split content */
+
+
+.main-header-titles {
+  flex: 1;
+  text-align: left;
+}
+
+.main-header-titles h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.main-header-titles p {
+  color: var(--text-dim);
+  font-size: 15px;
+  margin: 0;
+}
+
+.preview-toggle {
+  margin-top: 4px;
+  color: var(--text-dim);
+  transition: color 0.2s;
+}
+
+.preview-toggle:hover {
+  color: var(--accent);
+}
+
+.content-split-area {
+  display: flex;
+  gap: 24px;
+  flex: 1;
+  min-height: 0; /* needed for flex scrolling */
+  width: 100%;
+}
+
+
+
+.search-arena.with-preview {
+  max-width: 50%;
+  margin: 0;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+
+/* Layout updates for split content */
+.main-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.main-header-titles {
+  flex: 1;
+  text-align: left;
+}
+
+.main-header-titles h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.main-header-titles p {
+  color: var(--text-dim);
+  font-size: 15px;
+  margin: 0;
+}
+
+.preview-toggle {
+  margin-top: 4px;
+}
+
+.content-split-area {
+  display: flex;
+  gap: 24px;
+  flex: 1;
+  min-height: 0; /* needed for flex scrolling */
+  width: 100%;
+}
+
+.search-arena {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  transition: max-width 0.3s ease;
+}
+
+.search-arena.with-preview {
+  max-width: 50%;
+}
+
+.preview-arena {
+  width: 50%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  animation: slideIn 0.3s ease forwards;
+}
+
+.file-preview-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%; /* Force it to take up the space */
+  box-shadow: var(--shadow-md);
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+
+/* Unified Input Panel Styling restored & modernized */
+/* Ensure the chat ends up above the input box by making chat-thread push down */
+.chat-thread-messages {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+
+/* Unified Input Panel Styling restored & modernized */
+.unified-input-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  flex: 1;
+}
+
+
+
+/* Ensure the chat messages stick to the bottom */
+
+
+/* Modern sleek input positioning */
+.unified-input-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.chat-thread {
+  flex: 1; /* This will push the input to bottom if there are messages */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-right: 8px;
+}
+
+.chat-thread > :first-child {
+  margin-top: auto; /* Pushes the message blocks flush to the bottom */
+}
+
+.input-bar-container {
+  margin-top: auto; /* Push down to bottom natively when empty */
+  /* Keep its internal styles untouched */
 }
