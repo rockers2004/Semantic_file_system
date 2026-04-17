@@ -43,8 +43,9 @@ from backend_api.app.slpfs_runtime import (
     get_runtime,
     get_root_path,
     set_root_path,
-    get_runtime_health_snapshot,
 )
+from backend_api.app.runtime_manager import initialize_backends, get_backend_health_snapshot
+from backend_api.app.semantixel_runtime import get_semantixel_runtime, get_semantixel_config
 
 app = FastAPI(title="Semantic File System API", version="0.1.0")
 
@@ -55,6 +56,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def initialize_runtime_layers() -> None:
+    """Initialize all backend-managed runtimes in this same process."""
+    initialize_backends()
+
 # Response Models
 class Meta(BaseModel):
     request_id: str
@@ -105,6 +113,20 @@ class CommandRequest(BaseModel):
 
 class FileReadRequest(BaseModel):
     path: str
+
+
+class MultimodalSearchRequest(BaseModel):
+    query: str
+    top_k: Optional[int] = Field(default=None, ge=1, le=50)
+    threshold: Optional[float] = None
+    media_type: str = "image"
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Query cannot be empty")
+        return value.strip()
 
 class ConfigUpdateRequest(BaseModel):
     root_path: str
@@ -209,25 +231,33 @@ async def health_check(request: Request):
     Check backend health status
     Returns status of backend and dependencies (Ollama, models)
     """
-    snapshot = get_runtime_health_snapshot()
+    backend_snapshot = get_backend_health_snapshot()
+    slpfs_snapshot = backend_snapshot.get("slpfs", {})
+    semantixel_snapshot = backend_snapshot.get("semantixel", {})
 
-    backend_ok = snapshot.get("runtime_ready", False) and not snapshot.get("runtime_error")
-    ollama_ok = snapshot.get("ollama_running", False)
+    backend_ok = slpfs_snapshot.get("backend") == "ready"
+    ollama_ok = slpfs_snapshot.get("ollama_status") == "ready"
+    sem_enabled = bool(semantixel_snapshot.get("enabled"))
+    sem_ready = bool(semantixel_snapshot.get("ready"))
 
     return SuccessResponse(
         ok=True,
         data={
-            "status": "healthy" if (backend_ok and ollama_ok) else "degraded",
+            "status": backend_snapshot.get("status", "degraded"),
             "timestamp": datetime.utcnow().isoformat(),
-            "backend_status": "ok" if backend_ok else ("error" if snapshot.get("runtime_error") else "unknown"),
-            "runtime_loaded": snapshot.get("runtime_ready", False),
+            "backend_status": "ok" if backend_ok else ("error" if slpfs_snapshot.get("runtime_error") else "unknown"),
+            "runtime_loaded": slpfs_snapshot.get("runtime_loaded", False),
             "ollama_status": "ok" if ollama_ok else "unavailable",
-            "model_status": "ok" if (ollama_ok and snapshot.get("ollama_model")) else "not_available",
-            "indexed_file_count": snapshot.get("indexed_files", 0),
-            "current_root": snapshot.get("root_path"),
-            "runtime_error": snapshot.get("runtime_error"),
-            "ollama_model": snapshot.get("ollama_model"),
-            "embedding_model": snapshot.get("embedding_model"),
+            "model_status": "ok" if (ollama_ok and slpfs_snapshot.get("model_status") == "ready") else "not_available",
+            "indexed_file_count": slpfs_snapshot.get("indexed_files", 0),
+            "current_root": slpfs_snapshot.get("root_path"),
+            "runtime_error": slpfs_snapshot.get("runtime_error"),
+            "ollama_model": slpfs_snapshot.get("ollama_model"),
+            "embedding_model": slpfs_snapshot.get("embedding_model"),
+            "multimodal_enabled": sem_enabled,
+            "multimodal_ready": sem_ready,
+            "multimodal_error": semantixel_snapshot.get("runtime_error"),
+            "multimodal_db_path": semantixel_snapshot.get("db_path"),
         },
         meta=Meta(request_id=request.state.request_id),
     )
@@ -242,6 +272,7 @@ async def get_config(request: Request):
         data={
             "root_path": get_root_path(),
             "max_depth": 10,
+            "multimodal": get_semantixel_config(),
         },
         meta=Meta(request_id=request.state.request_id),
     )
@@ -561,6 +592,36 @@ async def run_command(request: Request, payload: CommandRequest):
             "slpfs_success": success,
             "slpfs_error": error_message or None,
             "ollama_output": result.get("ollama_output"),
+        },
+        meta=Meta(request_id=request.state.request_id),
+    )
+
+
+@app.post("/api/v1/multimodal/search")
+async def multimodal_search(request: Request, payload: MultimodalSearchRequest):
+    """Multimodal semantic search served by in-process Semantixel runtime."""
+    try:
+        runtime = get_semantixel_runtime()
+        results = runtime.semantic_text_search(
+            query=payload.query,
+            top_k=payload.top_k,
+            threshold=payload.threshold,
+            media_type=payload.media_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Multimodal search failed") from exc
+
+    return SuccessResponse(
+        ok=True,
+        data={
+            "query": payload.query,
+            "total": len(results),
+            "results": results,
+            "source": "semantixel",
         },
         meta=Meta(request_id=request.state.request_id),
     )

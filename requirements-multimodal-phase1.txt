@@ -1,0 +1,11 @@
+transformers==4.53.3
+open-clip-torch==3.0.0
+timm==1.0.19
+einops==0.8.0
+pillow==10.4.0
+numpy==1.26.4
+requests==2.32.4
+chromadb==0.4.24
+ftfy==6.3.1
+regex==2024.11.6
+scikit-learn==1.7.1

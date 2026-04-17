@@ -15,3 +15,10 @@ features:
   enable_versioning: false
   enable_redis: false
   enable_rollback: false
+multimodal:
+  enabled: false
+  db_path: ./db_multimodal
+  include_directories: []
+  exclude_directories: []
+  top_k_default: 5
+  threshold_default: 0.0
