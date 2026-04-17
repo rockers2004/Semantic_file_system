@@ -6,7 +6,7 @@ interface StartupScreenProps {
 }
 
 export function StartupScreen({ onReady }: StartupScreenProps) {
-  const [status, setStatus] = useState("Starting backend process...");
+  const [status, setStatus] = useState("Waking up...");
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -14,12 +14,12 @@ export function StartupScreen({ onReady }: StartupScreenProps) {
       while (!isReady) {
         const health = await checkHealth();
         if (health && health.ok) {
-          setStatus("✓ Backend Ready");
+          setStatus("Ready to go!");
           setIsReady(true);
           onReady();  // Notify parent -> ready to show main app
           break;
         } else {
-          setStatus("Waiting for backend to initialize...");
+          setStatus("Waking up...");
         }
         // If not ready, wait 500ms and try again
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -36,11 +36,24 @@ export function StartupScreen({ onReady }: StartupScreenProps) {
       justifyContent: "center",
       alignItems: "center",
       height: "100vh",
-      backgroundColor: "#f5f5f5",
-      fontFamily: "sans-serif",
+      backgroundColor: "#ffffff",
+      fontFamily: "Inter, system-ui, sans-serif",
     }}>
-      <h1>SLPFS Desktop</h1>
-      <p style={{ fontSize: "18px", color: "#666" }}>{status}</p>
+      <h1 style={{ fontSize: "28px", fontWeight: "600", marginBottom: "16px" }}>My Files</h1>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#86868b" }}>
+        <div className="typing-indicator" style={{ display: "flex", gap: "4px" }}>
+          <span style={{ width: "6px", height: "6px", background: "#86868b", borderRadius: "50%", animation: "bounce 1.4s infinite ease-in-out both", animationDelay: "-0.32s" }}></span>
+          <span style={{ width: "6px", height: "6px", background: "#86868b", borderRadius: "50%", animation: "bounce 1.4s infinite ease-in-out both", animationDelay: "-0.16s" }}></span>
+          <span style={{ width: "6px", height: "6px", background: "#86868b", borderRadius: "50%", animation: "bounce 1.4s infinite ease-in-out both" }}></span>
+        </div>
+        <p style={{ fontSize: "16px", margin: 0 }}>Starting up...</p>
+      </div>
+      <style>{`
+        @keyframes bounce {
+          0%, 80%, 100% { transform: scale(0); }
+          40% { transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 }

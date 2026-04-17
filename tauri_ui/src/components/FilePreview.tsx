@@ -131,44 +131,43 @@ export function FilePreview({ selectedPath }: FilePreviewProps) {
   };
 
   if (!selectedPath) {
-    return <div className="file-preview-placeholder">Select a file to preview its contents.</div>;
+    return <div className="file-preview-placeholder">Select a file to see what's inside.</div>;
   }
 
   return (
     <section className="file-preview-panel">
-      <div className="file-preview-header">
+      <div className="file-preview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h3>Preview</h3>
-          <p className="file-preview-label">Selected file</p>
+          <h3>{selectedPath.split(/[/\\]/).pop()}</h3>
+          <p className="file-preview-path">{selectedPath}</p>
         </div>
         <button
           type="button"
-          className="file-preview-path file-preview-path-button"
+          className="btn-icon"
           onClick={() => void handleOpenSelectedPath()}
-          title="Choose app to open this file"
+          title="Open in default app"
+          style={{ width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--accent)', color: 'white', borderRadius: '50%' }}
         >
-          {selectedPath}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
         </button>
       </div>
 
-      {openError && <div className="file-preview-error">{openError}</div>}
+      {openError && <div className="file-preview-error" style={{ color: 'red', marginTop: '10px' }}>{openError}</div>}
 
-      {loading && <div className="file-preview-status">Loading preview...</div>}
-
-      {error && <div className="file-preview-error">{error}</div>}
+      {loading && <div className="file-preview-status status-loading" style={{ marginTop: '20px' }}>Loading...</div>}
+      
+      {error && <div className="file-preview-error error-bubble" style={{ marginTop: '20px', padding: '12px' }}>{error}</div>}
 
       {!loading && !error && previewKind === "text" && (
-        <>
-          <div className="file-preview-meta">
-            <span>Encoding: {encoding || "unknown"}</span>
-            <span>Size: {size ?? 0} bytes</span>
-            <span>Modified: {modified || "unknown"}</span>
-          </div>
-
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <pre className="file-preview-content" aria-label="file content preview">
             {content}
           </pre>
-        </>
+          <div className="file-preview-meta" style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--text-dim)', paddingTop: '8px' }}>
+            <span>{(size ?? 0) < 1024 ? `${size} B` : `${Math.round((size ?? 0) / 1024)} KB`}</span>
+            <span>{modified ? new Date(modified).toLocaleString() : "Unknown date"}</span>
+          </div>
+        </div>
       )}
 
       {!loading && !error && previewKind === "image" && mediaSrc && (
@@ -176,8 +175,8 @@ export function FilePreview({ selectedPath }: FilePreviewProps) {
           <img
             className="file-preview-image"
             src={mediaSrc}
-            alt="Selected file preview"
-            onError={() => setMediaError("Image preview failed to load in WebView.")}
+            alt="Preview"
+            onError={() => setMediaError("Unable to display image preview.")}
           />
         </div>
       )}
@@ -189,18 +188,18 @@ export function FilePreview({ selectedPath }: FilePreviewProps) {
             src={mediaSrc}
             controls
             preload="metadata"
-            onError={() => setMediaError("Video preview failed to load in WebView.")}
+            onError={() => setMediaError("Unable to play video preview.")}
           />
         </div>
       )}
 
-      {mediaError && <div className="file-preview-error">{mediaError}</div>}
+      {mediaError && <div className="file-preview-error error-bubble" style={{ marginTop: '20px', padding: '12px' }}>{mediaError}</div>}
 
       {!loading && !error && previewKind === "pdf" && (
         <div className="file-preview-placeholder">
-          <p>PDF preview is disabled in-app for stability on large files.</p>
-          <button type="button" onClick={() => void handleOpenSelectedPath()}>
-            Open With...
+          <p>We don't preview PDFs directly to keep the app fast.</p>
+          <button className="btn-confirm" type="button" onClick={() => void handleOpenSelectedPath()} style={{ width: 'auto', padding: '10px 24px' }}>
+            Open PDF
           </button>
         </div>
       )}

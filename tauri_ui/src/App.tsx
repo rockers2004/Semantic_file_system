@@ -85,41 +85,46 @@ function App() {
     return <StartupScreen onReady={() => setBackendReady(true)} />;
   }
 
-  // Main app UI goes here once backend is ready
+  // Main app UI gets a smoother layout for Layman users
   return (
     <div className="app-layout">
       <aside className="sidebar">
-        <section className="root-selector-card">
-          <h3>Root Directory</h3>
-          <p className="root-path-display">Current: {currentRootPath || "Loading..."}</p>
-          <div className="root-selector-row">
-            <input
-              type="text"
-              value={rootPathInput}
-              onChange={(event) => setRootPathInput(event.target.value)}
-              placeholder="Enter folder path"
-            />
-            <button type="button" onClick={() => void handleBrowseRoot()} disabled={isUpdatingRoot}>
-              Browse...
-            </button>
-            <button type="button" onClick={() => void handleSetRoot()} disabled={isUpdatingRoot}>
-              {isUpdatingRoot ? "Setting..." : "Set Root"}
+        <div className="sidebar-header">
+          <h2>My Files</h2>
+        </div>
+        
+        <FileTree onFileSelect={setSelectedFile} refreshToken={treeRefreshToken} />
+        
+        <div className="root-settings-compact">
+          <p className="settings-label">Search Folder</p>
+          <div className="root-quick-selector">
+            <span className="current-root-pill" title={currentRootPath}>{currentRootPath ? "Folder Set" : "Not Set"}</span>
+            <button type="button" className="btn-icon" onClick={() => void handleBrowseRoot()} title="Change Folder">
+              ⚙️
             </button>
           </div>
-          {rootStatus && <p className="root-status-ok">{rootStatus}</p>}
+          {rootPathInput !== currentRootPath && (
+             <button type="button" className="btn-confirm" onClick={() => void handleSetRoot()} disabled={isUpdatingRoot}>
+              {isUpdatingRoot ? "Applying..." : `Apply Folder`}
+             </button>
+          )}
           {rootError && <p className="root-status-error">{rootError}</p>}
-        </section>
-
-        <FileTree onFileSelect={setSelectedFile} refreshToken={treeRefreshToken} />
+        </div>
       </aside>
 
       <main className="main-panel">
-        <h1>SLPFS Desktop App</h1>
-        <p>Backend ready.</p>
+        <header className="main-header">
+          <h1>What are you looking for?</h1>
+          <p>Just type what you need. We'll find the right files or do the task for you.</p>
+        </header>
 
-        <UnifiedInput setSelectedFile={setSelectedFile} />
+        <div className="search-arena">
+          <UnifiedInput setSelectedFile={setSelectedFile} />
+        </div>
 
-        <FilePreview selectedPath={selectedFile} />
+        <div className="preview-arena">
+          <FilePreview selectedPath={selectedFile} />
+        </div>
       </main>
     </div>
   );

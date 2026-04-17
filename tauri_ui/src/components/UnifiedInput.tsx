@@ -252,19 +252,29 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
   return (
     <section className="unified-input-panel">
       <div className="unified-input-body">
+        
         <div className="chat-thread unified-chat-thread">
-          {status === "loading" && <p className="unified-status">Thinking...</p>}
-          {status === "error" && <p className="unified-error">{error}</p>}
+          {status === "loading" && (
+            <div className="chat-bubble chat-assistant-bubble status-loading">
+              <div className="typing-indicator">
+                <span></span><span></span><span></span>
+              </div>
+              <p className="chat-text">Working on it...</p>
+            </div>
+          )}
+          {status === "error" && (
+            <div className="chat-bubble error-bubble">
+              <p className="chat-text">{error}</p>
+            </div>
+          )}
 
           {status === "done" && (
             <>
               <div className="chat-bubble chat-user-bubble">
-                <span className="chat-label">You</span>
                 <p className="chat-text">{inputText || text}</p>
               </div>
 
               <div className="chat-bubble chat-assistant-bubble">
-                <span className="chat-label">Assistant</span>
                 <p className="chat-text">{message || "No response generated."}</p>
               </div>
 
@@ -277,69 +287,76 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
                       className="unified-result-item"
                       onClick={() => setSelectedFile(item.path)}
                     >
-                      <div className="unified-result-path">{item.path}</div>
-                      <div className="unified-result-score">
-                        relevance: {Math.max(0, item.score).toFixed(2)}
-                        {item.score < 0 ? " (low match)" : ""}
-                        {item.media_type ? ` | type: ${item.media_type}` : ""}
-                        {typeof item.timestamp === "number" ? ` | time: ${item.timestamp.toFixed(2)}s` : ""}
+                      <div className="result-main-row">
+                        <span className="unified-result-path" title={item.path}>
+                          {item.path.split(/[/\\]/).pop() || item.path}
+                        </span>
+                        <span className="unified-result-score">
+                          {item.media_type ? `📄 ${item.media_type}` : ""}
+                        </span>
                       </div>
-                      <div className="unified-result-snippet">{item.snippet || "No snippet"}</div>
+                      <div className="unified-result-snippet">{item.snippet || item.path}</div>
                     </button>
                   ))}
                 </div>
-              )}
-
-              {results.length === 0 && (action === "search" || action === "image") && (
-                <p className="unified-status">
-                  {action === "image"
-                    ? "No multimodal results to display. If you expected matches, run multimodal indexing first."
-                    : "No matches found."}
-                </p>
               )}
             </>
           )}
         </div>
 
-        <div className="unified-input-controls unified-input-controls-bottom">
-          <select value={preset} onChange={(event) => setPreset(event.target.value as ActionPreset)}>
-            {ACTION_ORDER.map((value) => (
-              <option key={value} value={value}>
-                {ACTION_PRESETS[value].label}
-              </option>
-            ))}
-          </select>
-          <div className="unified-input-entry">
-            {presetConfig.prefix && <span className="unified-input-prefix">{presetConfig.prefix}</span>}
-            <input
-              type="text"
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder={presetConfig.placeholder}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  void handleRun();
-                }
-              }}
-            />
+        <div className="unified-input-controls-bottom">
+          <div className="input-bar-container">
+            <select 
+              className="action-select-subtle" 
+              value={preset} 
+              onChange={(event) => setPreset(event.target.value as ActionPreset)}
+              title="What do you want to do?"
+            >
+              {ACTION_ORDER.map((value) => (
+                <option key={value} value={value}>
+                  {value === "auto" ? "Smart Assistant" : ACTION_PRESETS[value].label}
+                </option>
+              ))}
+            </select>
+            
+            <div className="unified-input-entry">
+              {presetConfig.prefix && <span className="unified-input-prefix">{presetConfig.prefix}</span>}
+              <input
+                type="text"
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder={presetConfig.placeholder}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    void handleRun();
+                  }
+                }}
+              />
+            </div>
+
+            <button className="send-btn" type="button" onClick={() => void handleRun()} disabled={status === "loading"}>
+              {status === "loading" ? "..." : "Send"}
+            </button>
           </div>
-          <select value={mode} onChange={(event) => setMode(event.target.value as SearchMode)} disabled={!canEditMode}>
-            <option value="general">General (SLPFS)</option>
-            <option value="multimodal">Multimodal (Semantixel)</option>
-            <option value="auto">Auto</option>
-            <option value="hybrid">Hybrid</option>
-          </select>
-          <button type="button" onClick={() => void handleRun()} disabled={status === "loading"}>
-            {status === "loading" ? "Running..." : "Send"}
-          </button>
+          
+          <div className="secondary-controls">
+            <span className="routing-hint">
+               Search mode:
+            </span>
+            <select 
+              className="mode-select-subtle"
+              value={mode} 
+              onChange={(event) => setMode(event.target.value as SearchMode)} 
+              disabled={!canEditMode}
+            >
+              <option value="general">Standard (Text)</option>
+              <option value="multimodal">Deep AI Search (Images/Content)</option>
+              <option value="auto">Auto-detect</option>
+              <option value="hybrid">Best of both</option>
+            </select>
+          </div>
         </div>
-        {!canEditMode && (
-          <p className="unified-routing-hint">
-            The selected prefix controls routing automatically: command prefixes use SLPFS, `search` uses SLPFS retrieval,
-            and `image` uses multimodal retrieval.
-          </p>
-        )}
-        {canEditMode && <p className="unified-routing-hint">Use the routing selector on the right only when the action preset is set to Auto.</p>}
+
       </div>
     </section>
   );
