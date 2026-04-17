@@ -93,7 +93,7 @@ function App() {
           <h2>My Files</h2>
         </div>
         
-        <FileTree onFileSelect={setSelectedFile} refreshToken={treeRefreshToken} />
+        <FileTree onFileSelect={setSelectedFile} refreshToken={treeRefreshToken} selectedFile={selectedFile} />
         
         <div className="root-settings-compact">
           <p className="settings-label">Search Folder</p>

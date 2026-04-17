@@ -504,3 +504,190 @@ body, html {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-dim);
 }
+
+/* NEOTREE CSS */
+.neo-file-tree-panel {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-sidebar);
+  color: #cccccc;
+  font-family: 'Inter', system-ui, sans-serif;
+  border-bottom: 1px solid #222;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+}
+
+.neo-tree-header {
+  padding: 0 8px;
+  margin-bottom: 8px;
+}
+
+.neo-tree-header h3 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.neo-file-tree-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.neo-tree-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 4px;
+  margin: 1px 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  user-select: none;
+  outline: none;
+}
+
+.neo-tree-item:hover {
+  background-color: #1a1a1a;
+}
+
+.neo-tree-item.neo-selected {
+  background-color: rgba(10, 132, 255, 0.15);
+  color: var(--accent);
+}
+
+.neo-item-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.neo-chevron {
+  width: 14px;
+  height: 14px;
+  color: #666;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.neo-chevron-open {
+  transform: rotate(90deg);
+}
+
+.neo-chevron-spacer {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.neo-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.neo-folder-icon {
+  color: #eacb64;
+}
+
+.neo-ext-code { color: #519aba; }
+.neo-ext-image { color: #a074c4; }
+.neo-ext-text { color: #858585; }
+.neo-ext-generic { color: #858585; }
+
+.neo-name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.neo-dir-name {
+  color: #d4d4d4;
+  font-weight: 500;
+}
+
+.neo-file-name {
+  color: #a0a0a0;
+}
+
+.neo-selected .neo-file-name,
+.neo-selected .neo-dir-name {
+  color: var(--accent);
+}
+
+.neo-tree-loading {
+  font-size: 12px;
+  color: #666;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.neo-loading-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top-color: #a0a0a0;
+  border-left-color: #a0a0a0;
+  border-radius: 50%;
+  animation: neo-spin 0.8s linear infinite;
+}
+
+@keyframes neo-spin {
+  to { transform: rotate(360deg); }
+}
+
+.neo-children-container {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.2s ease-out;
+}
+
+.neo-children-container.neo-open {
+  grid-template-rows: 1fr;
+}
+
+.neo-children-container > * {
+  overflow: hidden;
+}
+
+.neo-tree-empty-state {
+  padding: 12px 8px;
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+
+.app-layout aside.sidebar {
+  background-color: #0f0f0f !important;
+  border-right-color: #222 !important;
+  color: #d4d4d4;
+}
+
+.sidebar-header h2 {
+  color: #d4d4d4 !important;
+}
+
+.root-settings-compact {
+  background-color: #1a1a1a !important;
+  border-color: #333 !important;
+  color: #d4d4d4;
+}
+
+.settings-label { color: #d4d4d4 !important; }
+.current-root-pill { background: #2d2d2d !important; color: #a0a0a0 !important; }
+.neo-file-tree-panel {
+  background-color: #0f0f0f !important;
+  border-bottom-color: #222 !important;
+}
