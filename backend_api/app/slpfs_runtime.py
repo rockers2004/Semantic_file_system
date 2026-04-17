@@ -11,6 +11,7 @@ from threading import RLock
 from typing import Any, Optional
 
 import yaml
+from backend_api.app.runtime_manager import persist_root_path
 
 from slpfs.config_loader import load_config_from_yaml
 from slpfs.file_system import LocalSLPFS
@@ -72,29 +73,6 @@ def _initialize_runtime() -> None:
         _rebuild_runtime(raise_on_error=False)
 
 
-def _write_root_path_to_config(new_root: Path) -> None:
-    """Persist root path in config.yaml while preserving other keys."""
-    logger.info("persisting new root path to config", extra={"root_path": str(new_root)})
-
-    data: dict[str, Any]
-    if CONFIG_PATH.exists():
-        with CONFIG_PATH.open("r", encoding="utf-8") as file:
-            loaded = yaml.safe_load(file) or {}
-            data = loaded if isinstance(loaded, dict) else {}
-    else:
-        data = {}
-
-    directories = data.get("directories")
-    if not isinstance(directories, dict):
-        directories = {}
-
-    directories["root_dir"] = str(new_root)
-    data["directories"] = directories
-
-    with CONFIG_PATH.open("w", encoding="utf-8") as file:
-        yaml.safe_dump(data, file, sort_keys=False)
-
-
 def get_runtime() -> LocalSLPFS:
     """Return the shared LocalSLPFS runtime instance."""
     with _lock:
@@ -127,7 +105,7 @@ def set_root_path(new_root: str) -> str:
 
     with _lock:
         logger.info("Updating SLPFS root path", extra={"new_root": str(resolved_root)})
-        _write_root_path_to_config(resolved_root)
+        persist_root_path(str(resolved_root))
         _rebuild_runtime(raise_on_error=True)
 
     return str(resolved_root)
@@ -213,6 +191,13 @@ def get_runtime_error() -> Optional[str]:
     """Return runtime initialization/rebuild error, if any."""
     with _lock:
         return _state["runtime_error"]
+
+
+def shutdown_runtime() -> None:
+    """Release SLPFS runtime references for clean backend shutdown."""
+    with _lock:
+        _set_runtime(None, None)
+        logger.info("SLPFS runtime shut down")
 
 
 _initialize_runtime()

@@ -30,6 +30,21 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+EXPLICIT_OPERATION_PREFIXES = {
+    "create_file",
+    "create_dir",
+    "write",
+    "read",
+    "search",
+    "list",
+    "delete",
+    "move",
+    "copy",
+    "reindex",
+    "stats",
+    "chat",
+}
+
 
 def _extract_first_json_block(text: str) -> Optional[str]:
     """Extract the first balanced JSON object from text."""
@@ -46,6 +61,20 @@ def _extract_first_json_block(text: str) -> Optional[str]:
             if depth == 0:
                 return text[start : i + 1]
     return None
+
+
+def _extract_explicit_operation(text: str) -> tuple[Optional[str], str]:
+    """Return an exact operation token when the input starts with one."""
+    stripped = text.strip()
+    if not stripped:
+        return None, ""
+
+    first_token, _, remainder = stripped.partition(" ")
+    normalized = first_token.rstrip(":").lower()
+    if normalized in EXPLICIT_OPERATION_PREFIXES:
+        return normalized, remainder.strip()
+
+    return None, stripped
 
 class OllamaHandler: 
     """Handles interaction with local Ollama LLM"""
@@ -76,13 +105,24 @@ class OllamaHandler:
     
     def parse_command(self, user_input: str) -> Dict[str, Any]:
         """Parse natural language command using LLM"""
-        
-        system_prompt = """You are a file system command parser. Parse the user's natural language command into a structured JSON response. 
+        forced_operation, remaining_input = _extract_explicit_operation(user_input)
+        forced_operation_block = ""
+        if forced_operation:
+            forced_operation_block = f"""
+
+Explicit operation prefix detected:
+- The user's first token is exactly "{forced_operation}".
+- You MUST return operation "{forced_operation}".
+- Interpret the remaining text as arguments for that operation.
+- Do not change it to another operation unless the remaining text is empty and the selected operation can reasonably run without parameters.
+"""
+
+        system_prompt = f"""You are a file system command parser. Parse the user's natural language command into a structured JSON response.
 
 Available operations:
 - create_file: Create a new file (params: file_name, content)
 - create_dir: Create a directory (params: dir_name)
-- write: Write/append content to a file (params:  file_name, content, append)
+- write: Write/append content to a file (params: file_name, content, append)
 - read: Read a file (params: file_name)
 - search: Search files semantically (params: query, k, keywords)
 - list: List files in directory (params: subdir)
@@ -97,41 +137,49 @@ Important rules:
 - If user text is conversational (greeting, small talk, general question), return operation "chat".
 - Do NOT force filesystem operations for normal conversation.
 - Use filesystem operations only when user clearly asks for file actions.
+{forced_operation_block}
 
 Return ONLY valid JSON in this format:
-{
+{{
     "operation": "operation_name",
-    "parameters": {
+    "parameters": {{
         "param1": "value1",
         "param2": "value2"
-    },
+    }},
     "confidence": 0.95
-}
+}}
 
 Examples:
 User: "create a file called notes.txt"
-{"operation": "create_file", "parameters": {"file_name": "notes.txt"}, "confidence": 0.9}
+{{"operation": "create_file", "parameters": {{"file_name": "notes.txt"}}, "confidence": 0.9}}
 
 User: "write 'hello world' to test.txt"
-{"operation": "write", "parameters": {"file_name": "test.txt", "content": "hello world"}, "confidence": 0.9}
+{{"operation": "write", "parameters": {{"file_name": "test.txt", "content": "hello world"}}, "confidence": 0.9}}
 
 User: "search for files about machine learning"
-{"operation":  "search", "parameters": {"query": "machine learning", "k":  5}, "confidence": 0.95}
+{{"operation": "search", "parameters": {{"query": "machine learning", "k": 5}}, "confidence": 0.95}}
 
 User: "show me all files"
-{"operation":  "list", "parameters": {}, "confidence": 0.95}
+{{"operation": "list", "parameters": {{}}, "confidence": 0.95}}
 
 User: "move report.txt to documents/report.txt"
-{"operation": "move", "parameters": {"source":  "report.txt", "destination":  "documents/report.txt"}, "confidence": 0.9}
+{{"operation": "move", "parameters": {{"source": "report.txt", "destination": "documents/report.txt"}}, "confidence": 0.9}}
 
 User: "copy notes.txt to backup/notes.txt"
-{"operation": "copy", "parameters": {"source": "notes.txt", "destination": "backup/notes.txt"}, "confidence": 0.9}
+{{"operation": "copy", "parameters": {{"source": "notes.txt", "destination": "backup/notes.txt"}}, "confidence": 0.9}}
 
 User: "delete old_file.txt"
-{"operation": "delete", "parameters": {"file_name": "old_file.txt"}, "confidence": 0.9}
+{{"operation": "delete", "parameters": {{"file_name": "old_file.txt"}}, "confidence": 0.9}}
 
 User: "hello how are you"
-{"operation": "chat", "parameters": {"message": "Hello! I am doing well. How can I help with your files today?"}, "confidence": 0.95}"""
+{{"operation": "chat", "parameters": {{"message": "Hello! I am doing well. How can I help with your files today?"}}, "confidence": 0.95}}"""
+
+        model_input = user_input
+        if forced_operation:
+            model_input = (
+                f'Explicit operation: "{forced_operation}"\n'
+                f'Remaining request: "{remaining_input}"'
+            )
 
         try:
             # Call Ollama
@@ -141,7 +189,7 @@ User: "hello how are you"
                     "model": self.model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_input}
+                        {"role": "user", "content": model_input}
                     ],
                     "stream": False,
                     "options": {

@@ -30,24 +30,18 @@ Notes:
     - Designed for local desktop usage (Tauri integration)
     - CORS is enabled for development flexibility
 """
-import os
 from typing import Optional
 import uuid
 from datetime import datetime
-from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator, Field
 
-from backend_api.app.slpfs_runtime import (
-    get_runtime,
-    get_root_path,
-    set_root_path,
-)
-from backend_api.app.runtime_manager import initialize_backends, get_backend_health_snapshot
-from backend_api.app.semantixel_runtime import get_semantixel_runtime, get_semantixel_config
+from backend_api.app.backend_facade import get_backend_facade
 
 app = FastAPI(title="Semantic File System API", version="0.1.0")
+backend_facade = get_backend_facade()
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,7 +55,13 @@ app.add_middleware(
 @app.on_event("startup")
 async def initialize_runtime_layers() -> None:
     """Initialize all backend-managed runtimes in this same process."""
-    initialize_backends()
+    backend_facade.initialize()
+
+
+@app.on_event("shutdown")
+async def shutdown_runtime_layers() -> None:
+    """Shut down all backend-managed runtimes in this same process."""
+    backend_facade.shutdown()
 
 # Response Models
 class Meta(BaseModel):
@@ -90,7 +90,7 @@ class ErrorResponse(BaseModel):
 class SearchRequest(BaseModel):
     query: str
     k: int = Field(default=10, ge=1, le=50)
-    mode: str = "normal"
+    mode: str = "general"
 
     @field_validator("query")
     @classmethod
@@ -115,103 +115,22 @@ class FileReadRequest(BaseModel):
     path: str
 
 
-class MultimodalSearchRequest(BaseModel):
-    query: str
-    top_k: Optional[int] = Field(default=None, ge=1, le=50)
-    threshold: Optional[float] = None
-    media_type: str = "image"
+class IndexingRequest(BaseModel):
+    target: str = "text"
 
-    @field_validator("query")
+    @field_validator("target")
     @classmethod
-    def validate_query(cls, value: str) -> str:
-        if not value or not value.strip():
-            raise ValueError("Query cannot be empty")
-        return value.strip()
+    def validate_target(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        if normalized not in {"text", "multimodal", "all"}:
+            raise ValueError("target must be one of: text, multimodal, all")
+        return normalized
 
 class ConfigUpdateRequest(BaseModel):
     root_path: str
 
 
 MAX_TEXT_PREVIEW_BYTES = 1_000_000
-
-
-
-def _fallback_search_runtime_backup(query: str, k: int) -> list[dict]:
-    """
-    A simple fallback search implementation that performs a basic filename and content search
-    within the configured root directory. This is used when the main SLPFS runtime search is unavailable.
-
-    Args:
-        query (str): The search query string.
-        k (int): The maximum number of results to return.
-    Returns:
-        list[dict]: A list of search result dictionaries with file path, score, and preview.
-    """
-    root_dir = Path(get_root_path()).resolve()
-    query_lower = query.lower()
-    out: list[dict] = []
-
-    for file_path in root_dir.rglob("*"):
-        if not file_path.is_file():
-            continue
-        try:
-            name_match = query_lower in file_path.name.lower()
-            content = file_path.read_text(encoding="utf-8", errors="replace")
-            content_lower = content.lower()
-            content_match = query_lower in content_lower
-        except OSError:
-            continue
-
-        if not name_match and not content_match:
-            continue
-
-        score = 1.0 if name_match else 0.5
-        snippet = ""
-        if content_match:
-            idx = content_lower.find(query_lower)
-            start = max(0, idx - 80)
-            end =min (len(content), idx + len(query) + 80)
-            snippet = content[start:end].replace("\n", " ").replace("\r", " ")
-
-        out.append(
-            {
-                "path": str(file_path),
-                "score": score,
-                "snippet": snippet,
-                "is_dir": False,
-            }
-        )
-        if len(out) >= k:
-            break
-
-    return out
-
-
-
-
-def _resolve_safe_path(raw_path: Optional[str]) -> Path:
-    """
-    Resolves a given path relative to the current root and ensures it does not escape the allowed directory.
-
-    Args:
-        raw_path (Optional[str]): The raw path string to resolve. If None or empty,
-    Returns:
-        Path: The resolved and validated path.
-    """
-    current_root = Path(get_root_path()).resolve()
-
-    if not raw_path:
-        candidate = current_root
-    else:
-        requested_path = Path(raw_path)
-        candidate = requested_path if requested_path.is_absolute() else current_root / requested_path
-        candidate = candidate.resolve()
-
-    try:
-        candidate.relative_to(current_root)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Path is outside of the configured root") from exc
-    return candidate
 
 
 
@@ -231,7 +150,7 @@ async def health_check(request: Request):
     Check backend health status
     Returns status of backend and dependencies (Ollama, models)
     """
-    backend_snapshot = get_backend_health_snapshot()
+    backend_snapshot = backend_facade.health_snapshot()
     slpfs_snapshot = backend_snapshot.get("slpfs", {})
     semantixel_snapshot = backend_snapshot.get("semantixel", {})
 
@@ -240,24 +159,52 @@ async def health_check(request: Request):
     sem_enabled = bool(semantixel_snapshot.get("enabled"))
     sem_ready = bool(semantixel_snapshot.get("ready"))
 
+    health_status = backend_snapshot.get("status", "degraded")
+    slpfs_runtime_error = slpfs_snapshot.get("runtime_error")
+    multimodal_runtime_error = semantixel_snapshot.get("runtime_error")
+
     return SuccessResponse(
         ok=True,
         data={
-            "status": backend_snapshot.get("status", "degraded"),
+            # Aggregated UI-friendly status
+            "health_status": health_status,
+            # Backward-compatible alias
+            "status": health_status,
             "timestamp": datetime.utcnow().isoformat(),
+
+            # Required explicit runtime/loading status fields
+            "slpfs_runtime_loaded": slpfs_snapshot.get("runtime_loaded", False),
+            "multimodal_runtime_loaded": semantixel_snapshot.get("runtime_loaded", False),
+            "ollama_status": slpfs_snapshot.get("ollama_status", "unavailable"),
+            "vector_store_status": slpfs_snapshot.get("vector_store_status", "error"),
+            "multimodal_store_status": semantixel_snapshot.get("multimodal_store_status", "unavailable"),
+            "current_root": slpfs_snapshot.get("root_path"),
+            "multimodal_db_path": semantixel_snapshot.get("db_path"),
+            "slpfs_runtime_error": slpfs_runtime_error,
+            "multimodal_runtime_error": multimodal_runtime_error,
+            "runtime_errors": {
+                "slpfs": slpfs_runtime_error,
+                "multimodal": multimodal_runtime_error,
+            },
+
+            # Per-subsystem details for diagnostics
+            "subsystems": {
+                "slpfs": slpfs_snapshot,
+                "multimodal": semantixel_snapshot,
+            },
+
+            # Legacy fields retained for compatibility
             "backend_status": "ok" if backend_ok else ("error" if slpfs_snapshot.get("runtime_error") else "unknown"),
             "runtime_loaded": slpfs_snapshot.get("runtime_loaded", False),
-            "ollama_status": "ok" if ollama_ok else "unavailable",
+            "ollama_status_legacy": "ok" if ollama_ok else "unavailable",
             "model_status": "ok" if (ollama_ok and slpfs_snapshot.get("model_status") == "ready") else "not_available",
             "indexed_file_count": slpfs_snapshot.get("indexed_files", 0),
-            "current_root": slpfs_snapshot.get("root_path"),
-            "runtime_error": slpfs_snapshot.get("runtime_error"),
+            "runtime_error": slpfs_runtime_error,
             "ollama_model": slpfs_snapshot.get("ollama_model"),
             "embedding_model": slpfs_snapshot.get("embedding_model"),
             "multimodal_enabled": sem_enabled,
             "multimodal_ready": sem_ready,
-            "multimodal_error": semantixel_snapshot.get("runtime_error"),
-            "multimodal_db_path": semantixel_snapshot.get("db_path"),
+            "multimodal_error": multimodal_runtime_error,
         },
         meta=Meta(request_id=request.state.request_id),
     )
@@ -269,11 +216,7 @@ async def get_config(request: Request):
     """Get current configuration"""
     return SuccessResponse(
         ok=True,
-        data={
-            "root_path": get_root_path(),
-            "max_depth": 10,
-            "multimodal": get_semantixel_config(),
-        },
+        data=backend_facade.config_snapshot(),
         meta=Meta(request_id=request.state.request_id),
     )
 
@@ -289,7 +232,7 @@ def _update_root_config_response(request: Request, payload: ConfigUpdateRequest)
     """
     try:
         # Single validation + persistence + runtime rebuild in one call
-        updated_root = set_root_path(payload.root_path)
+        updated_root = backend_facade.update_root_path(payload.root_path)
     except ValueError as exc:
         # Validation errors from set_root_path
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -327,40 +270,18 @@ async def get_tree(request: Request, path: Optional[str] = None, depth: int = 1)
     - path: directory path to list (defaults to root)
     - depth: currently accepted for compatibility, used as 1-level listing
     """
-    target = _resolve_safe_path(path)
-
-    if not target.exists():
-        raise HTTPException(status_code=404, detail="Path does not exist")
-    if not target.is_dir():
-        raise HTTPException(status_code=400, detail="Path is not a directory")
-
-    entries = []
-    for entry in target.iterdir():
-        try:
-            stat = entry.stat()
-            entries.append(
-                {
-                    "name": entry.name,
-                    "path": str(entry.resolve()),
-                    "is_dir": entry.is_dir(),
-                    "size": stat.st_size,
-                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                }
-            )
-        except OSError:
-            # Skip entries that cannot be accessed.
-            continue
-
-    entries.sort(key=lambda item: (not item["is_dir"], item["name"].lower()))
+    try:
+        data = backend_facade.list_tree(path=path, depth=depth)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except NotADirectoryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return SuccessResponse(
         ok=True,
-        data={
-            "root": get_root_path(),
-            "path": str(target),
-            "depth": max(1, depth),
-            "entries": entries,
-        },
+        data=data,
         meta=Meta(request_id=request.state.request_id),
     )
 
@@ -380,15 +301,16 @@ async def root():
 # Error handler
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc):
-    return ErrorResponse(
+    payload = ErrorResponse(
         ok=False,
         error=ErrorPayload(
             code="HTTP_ERROR",
-            message=exc.detail,
+            message=str(exc.detail),
             details={"status_code": exc.status_code},
         ),
         meta=Meta(request_id=request.state.request_id),
     )
+    return JSONResponse(status_code=exc.status_code, content=payload.model_dump())
 
 
 @app.post("/api/v1/file/read")
@@ -396,49 +318,24 @@ async def read_file(request: Request, payload: FileReadRequest):
     """
     Read a file within the configured root and return its text content.
     """
-    if not payload.path.strip():
-        raise HTTPException(status_code=400, detail="Path is required")
-
-    target = _resolve_safe_path(payload.path)
-
-    if not target.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    if not target.is_file():
-        raise HTTPException(status_code=400, detail="Path is a directory, not a file")
-
-    stat = target.stat()
-
-    if target.suffix.lower() == ".pdf":
-        raise HTTPException(
-            status_code=415,
-            detail="PDF text preview is disabled in API. Open the file with a system app.",
-        )
-
-    if stat.st_size > MAX_TEXT_PREVIEW_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File is too large for preview (>{MAX_TEXT_PREVIEW_BYTES} bytes)",
-        )
-
     try:
-        raw = target.read_bytes()
+        data = backend_facade.read_text_file(payload.path, MAX_TEXT_PREVIEW_BYTES)
+    except ValueError as exc:
+        detail = str(exc)
+        status = 415 if "preview" in detail.lower() else 400
+        raise HTTPException(status_code=status, detail=detail) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except IsADirectoryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OverflowError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(status_code=500, detail="Unable to read file") from exc
 
-    if b"\x00" in raw:
-        raise HTTPException(status_code=415, detail="Binary file preview is not supported")
-
-    content = raw.decode("utf-8", errors="replace")
-
     return SuccessResponse(
         ok=True,
-        data={
-            "path": str(target),
-            "content": content,
-            "encoding": "utf-8",
-            "size": stat.st_size,
-            "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-        },
+        data=data,
         meta=Meta(request_id=request.state.request_id),
     )
 
@@ -448,66 +345,35 @@ async def search_files(request: Request, payload: SearchRequest):
     Search via SLPFS runtime and map results to frontend contract.
     Optional fallback can be enabled explicitly when runtime is unavailable.
     """
-    query = payload.query.strip()
-    k = payload.k
-    use_fallback = str(os.getenv("SLPFS_SEARCH_FALLBACK", "0")).lower() in {"1", "true", "yes"}
-
     try:
-        runtime = get_runtime()
-        core_result = runtime.search_files(query=query, k=k, keywords=None)
+        data = backend_facade.search_text(
+            query=payload.query.strip(),
+            k=payload.k,
+            mode=payload.mode,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
-        if not use_fallback:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        # explicit backup mode only
-        fallback_items = _fallback_search_runtime_backup(query=query, k=k)
-        return SuccessResponse(
-            ok=True,
-            data={
-                "query": query,
-                "total": len(fallback_items),
-                "results": fallback_items,
-            },
-            meta = Meta(request_id=request.state.request_id),
-        )
+        if "semantixel runtime is disabled" in str(exc).lower():
+            return SuccessResponse(
+                ok=True,
+                data={
+                    "query": payload.query.strip(),
+                    "total": 0,
+                    "results": [],
+                    "source": "semantixel",
+                    "search_status": "failed",
+                    "error": "Multimodal search is disabled in config. Switch mode to General or enable multimodal.",
+                },
+                meta=Meta(request_id=request.state.request_id),
+            )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Search failed") from exc
-    
-    # pass through clear SLPFS failure if present
-    if not core_result.get("success", False):
-        return SuccessResponse(
-            ok=True,
-            data={
-                "query": query,
-                "total": 0,
-                "results": [],
-                "source": "runtime",
-                "search_status": "failed",
-                "error": core_result.get("error", "Search failed "),
-            },
-            meta=Meta(request_id=request.state.request_id),
-        )
-
-    results = core_result.get("results", [])
 
     return SuccessResponse(
         ok=True,
-        data={
-            "query": query,
-            "total": len(results),
-            "results": [
-                {
-                    "path": item.get("file_path", ""),
-                    "score": item.get("score", 0.0),
-                    "snippet": item.get("preview", "") or "",
-                    "is_dir": False,
-                }
-                for item in results
-            ],
-            "source": "runtime",
-            "search_status": "ok",
-        },
+        data=data,
         meta=Meta(request_id=request.state.request_id),
     )
 
@@ -518,11 +384,9 @@ async def run_command(request: Request, payload: CommandRequest):
     Excute natural language commands through SLPFS runtime and return
     a normalized API envelop for success/failure outcomes.
     """
-    text = payload.text.strip()
-
     try:
-        runtime = get_runtime()
-        result = runtime.process_natural_language(text)
+        text = payload.text.strip()
+        result = backend_facade.run_command(text)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -597,32 +461,21 @@ async def run_command(request: Request, payload: CommandRequest):
     )
 
 
-@app.post("/api/v1/multimodal/search")
-async def multimodal_search(request: Request, payload: MultimodalSearchRequest):
-    """Multimodal semantic search served by in-process Semantixel runtime."""
+@app.post("/api/v1/index")
+async def trigger_indexing(request: Request, payload: IndexingRequest):
+    """Trigger indexing for text, multimodal, or both runtimes."""
     try:
-        runtime = get_semantixel_runtime()
-        results = runtime.semantic_text_search(
-            query=payload.query,
-            top_k=payload.top_k,
-            threshold=payload.threshold,
-            media_type=payload.media_type,
-        )
+        data = backend_facade.trigger_indexing(payload.target)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Multimodal search failed") from exc
+        raise HTTPException(status_code=500, detail="Indexing failed") from exc
 
     return SuccessResponse(
         ok=True,
-        data={
-            "query": payload.query,
-            "total": len(results),
-            "results": results,
-            "source": "semantixel",
-        },
+        data=data,
         meta=Meta(request_id=request.state.request_id),
     )
 

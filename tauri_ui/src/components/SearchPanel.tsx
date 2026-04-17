@@ -6,10 +6,12 @@ interface SearchPanelProps {
 }
 
 type SearchStatus = "idle" | "loading" | "error" | "results";
+type SearchMode = "general" | "multimodal" | "auto" | "hybrid";
 
 export function SearchPanel({ setSelectedFile }: SearchPanelProps) {
     const [query, setQuery] = useState("");
     const [k, setK] = useState(10);
+    const [mode, setMode] = useState<SearchMode>("general");
     const [status, setStatus] = useState<SearchStatus>("idle");
     const [results, setResults] = useState<SearchResult[]>([]);
     const [error, setError] = useState("");
@@ -29,7 +31,7 @@ export function SearchPanel({ setSelectedFile }: SearchPanelProps) {
         setError("");
 
         try {
-            const data = await searchFiles(trimmed, k, "normal");
+            const data = await searchFiles(trimmed, k, mode);
             setResults(data.results);
             setTotal(data.total);
             setStatus("results");
@@ -56,6 +58,12 @@ export function SearchPanel({ setSelectedFile }: SearchPanelProps) {
                         }
                     }}
                 />
+                <select value={mode} onChange={(e) => setMode(e.target.value as SearchMode)}>
+                    <option value="general">General (SLPFS)</option>
+                    <option value="multimodal">Multimodal (Semantixel)</option>
+                    <option value="auto">Auto</option>
+                    <option value="hybrid">Hybrid</option>
+                </select>
                 <select value={k} onChange={(e) => setK(Number(e.target.value))}>
                     <option value={5}>5</option>
                     <option value={10}>10</option>

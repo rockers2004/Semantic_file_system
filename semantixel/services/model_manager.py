@@ -2,8 +2,26 @@ from typing import Optional
 from semantixel.core.config import config
 from semantixel.core.logging import logger
 from semantixel.providers.clip.hf_provider import HFCLIPProvider
-from semantixel.providers.ocr.doctr_provider import DoctrOCRProvider
+from semantixel.providers.base import OCRProvider
 from semantixel.providers.text.hf_provider import HFTextEmbeddingProvider
+
+try:
+    from semantixel.providers.ocr.doctr_provider import DoctrOCRProvider
+except ModuleNotFoundError:
+    DoctrOCRProvider = None
+
+
+class NullOCRProvider(OCRProvider):
+    """Safe OCR fallback when optional OCR dependencies are unavailable."""
+
+    def load(self):
+        return None
+
+    def unload(self):
+        return None
+
+    def apply_ocr(self, images, threshold: float = 0.4):
+        return [None for _ in images]
 
 class ModelManager:
     """
@@ -43,11 +61,14 @@ class ModelManager:
     def ocr(self):
         if self._ocr_provider is None:
             provider_type = config.ocr_provider
-            if provider_type == "doctr":
+            if provider_type == "doctr" and DoctrOCRProvider is not None:
                 self._ocr_provider = DoctrOCRProvider()
+            elif provider_type == "doctr":
+                logger.warning("Doctr OCR provider is not installed. OCR will be skipped.")
+                self._ocr_provider = NullOCRProvider()
             else:
-                logger.warning(f"Unsupported OCR provider: {provider_type}. Falling back to Doctr.")
-                self._ocr_provider = DoctrOCRProvider()
+                logger.warning(f"Unsupported OCR provider: {provider_type}. OCR will be skipped.")
+                self._ocr_provider = NullOCRProvider()
         return self._ocr_provider
 
     @property

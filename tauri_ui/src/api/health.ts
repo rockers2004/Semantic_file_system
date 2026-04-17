@@ -1,9 +1,32 @@
 export interface HealthResponse {
   ok: boolean;
   data: {
-    backend: string;
-    ollama: string;
-    model: string;
+    health_status: string;
+    status: string;
+    slpfs_runtime_loaded: boolean;
+    multimodal_runtime_loaded: boolean;
+    ollama_status: string;
+    vector_store_status: string;
+    multimodal_store_status: string;
+    current_root: string | null;
+    multimodal_db_path: string | null;
+    slpfs_runtime_error: string | null;
+    multimodal_runtime_error: string | null;
+    runtime_errors: {
+      slpfs: string | null;
+      multimodal: string | null;
+    };
+    subsystems: {
+      slpfs: Record<string, unknown>;
+      multimodal: Record<string, unknown>;
+    };
+
+    // Legacy compatibility fields
+    backend_status?: string;
+    runtime_loaded?: boolean;
+    ollama_status_legacy?: string;
+    model_status?: string;
+    indexed_file_count?: number;
   };
   error: null | any;
   meta: any;

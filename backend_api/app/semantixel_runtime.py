@@ -55,21 +55,112 @@ class SemantixelRuntimeService:
         if not self.enabled:
             return
 
-        from semantixel.core.config import config as sem_config
         from semantixel.services.index_service import IndexService
+        from semantixel.services.model_manager import model_manager
         from semantixel.services.search_service import SearchService
-
-        include_dirs = list(self.settings.get("include_directories", []))
-        exclude_dirs = list(self.settings.get("exclude_directories", []))
-
-        # Semantixel services read these globals today; set them from multimodal config.
-        sem_config.include_directories = include_dirs
-        sem_config.exclude_directories = exclude_dirs
 
         db_path = str(self.settings.get("db_path", _DEFAULT_MULTIMODAL_CONFIG["db_path"]))
 
+        # Keep model loading lazy: wiring model_manager here does not load models until
+        # IndexService/SearchService operations access model_manager providers.
+        _ = model_manager
+
         self.index_service = IndexService(db_path=db_path)
         self.search_service = SearchService(self.index_service, _NoopFaceService())
+        self._apply_scan_scope()
+
+    def _ensure_search_index_ready(self) -> None:
+        """Build the multimodal index on first search when the store is empty."""
+        if self.index_service is None:
+            raise RuntimeError("Semantixel index service is not initialized")
+
+        include_dirs, _exclude_dirs = self._apply_scan_scope()
+        if not include_dirs:
+            return
+
+        try:
+            indexed_count = int(self.index_service.image_collection.count())
+        except Exception as exc:
+            logger.warning("Unable to inspect multimodal index count before search: %s", exc)
+            return
+
+        if indexed_count > 0:
+            return
+
+        logger.info("Multimodal index is empty. Running an initial scan before search.")
+        self.index_service.run_full_scan()
+
+    def _apply_scan_scope(self) -> tuple[list[str], list[str]]:
+        """Apply include/exclude directories to Semantixel global config.
+
+        include_directories defines scan roots; exclude_directories prunes subtrees
+        from those roots. Excludes outside include roots are ignored.
+        """
+        from semantixel.core.config import config as sem_config
+
+        include_raw = self.settings.get("include_directories", [])
+        exclude_raw = self.settings.get("exclude_directories", [])
+
+        include_dirs: list[str] = []
+        for candidate in include_raw if isinstance(include_raw, list) else []:
+            if not isinstance(candidate, str) or not candidate.strip():
+                continue
+            resolved = Path(candidate).expanduser().resolve()
+            if resolved.exists() and resolved.is_dir():
+                include_dirs.append(str(resolved))
+
+        exclude_dirs: list[str] = []
+        for candidate in exclude_raw if isinstance(exclude_raw, list) else []:
+            if not isinstance(candidate, str) or not candidate.strip():
+                continue
+            resolved = Path(candidate).expanduser().resolve()
+            if not resolved.exists() or not resolved.is_dir():
+                continue
+
+            resolved_str = str(resolved)
+            under_include = False
+            for inc in include_dirs:
+                try:
+                    if Path(resolved_str).is_relative_to(Path(inc)):
+                        under_include = True
+                        break
+                except ValueError:
+                    continue
+
+            if under_include:
+                exclude_dirs.append(resolved_str)
+
+        sem_config.include_directories = include_dirs
+        sem_config.exclude_directories = exclude_dirs
+        return include_dirs, exclude_dirs
+
+    def run_full_scan(self) -> dict[str, Any]:
+        """Run multimodal indexing via Semantixel IndexService orchestrator.
+
+        IndexService internally reuses semantixel.utils.scan_utils for media discovery
+        and semantixel.utils.video_utils for video frame extraction.
+        """
+        if self.index_service is None:
+            raise RuntimeError("Semantixel index service is not initialized")
+
+        include_dirs, exclude_dirs = self._apply_scan_scope()
+        if not include_dirs:
+            return {
+                "status": "noop",
+                "message": "Multimodal indexing skipped: include_directories is empty or contains no existing directories.",
+                "source": "semantixel",
+                "scan_roots": [],
+                "excluded_roots": exclude_dirs,
+            }
+
+        self.index_service.run_full_scan()
+        return {
+            "status": "ok",
+            "message": "Multimodal indexing completed",
+            "source": "semantixel",
+            "scan_roots": include_dirs,
+            "excluded_roots": exclude_dirs,
+        }
 
     def semantic_text_search(
         self,
@@ -81,6 +172,8 @@ class SemantixelRuntimeService:
         """Search images/video frames with CLIP text embeddings."""
         if self.search_service is None:
             raise RuntimeError("Semantixel runtime is not initialized")
+
+        self._ensure_search_index_ready()
 
         resolved_top_k = int(top_k if top_k is not None else self.settings.get("top_k_default", 5))
         resolved_threshold = float(
@@ -163,15 +256,23 @@ def get_semantixel_runtime() -> SemantixelRuntimeService:
         runtime = _state["runtime"]
         runtime_error = _state["runtime_error"]
 
+    if not settings.get("enabled", False):
+        # Support runtime config toggles without requiring full process restart.
+        rebuild_semantixel_runtime(raise_on_error=False)
+        with _lock:
+            settings = _state["settings"]
+            runtime = _state["runtime"]
+            runtime_error = _state["runtime_error"]
+
         if not settings.get("enabled", False):
             raise RuntimeError("Semantixel runtime is disabled")
 
-        if runtime is None:
-            if runtime_error:
-                raise RuntimeError(f"Semantixel runtime not available: {runtime_error}")
-            raise RuntimeError("Semantixel runtime not initialized")
+    if runtime is None:
+        if runtime_error:
+            raise RuntimeError(f"Semantixel runtime not available: {runtime_error}")
+        raise RuntimeError("Semantixel runtime not initialized")
 
-        return runtime
+    return runtime
 
 
 def get_semantixel_config() -> dict[str, Any]:
@@ -189,10 +290,22 @@ def get_semantixel_health_snapshot() -> dict[str, Any]:
 
     enabled = bool(settings.get("enabled", False))
     ready = enabled and runtime is not None and not runtime_error
+    runtime_loaded = runtime is not None
+
+    if not enabled:
+        multimodal_store_status = "disabled"
+    elif runtime_loaded and getattr(runtime, "index_service", None) is not None:
+        multimodal_store_status = "ready"
+    elif runtime_error:
+        multimodal_store_status = "error"
+    else:
+        multimodal_store_status = "unavailable"
 
     return {
         "enabled": enabled,
         "ready": ready,
+        "runtime_loaded": runtime_loaded,
+        "multimodal_store_status": multimodal_store_status,
         "runtime_error": runtime_error,
         "db_path": settings.get("db_path"),
         "include_directories": settings.get("include_directories", []),
@@ -200,6 +313,28 @@ def get_semantixel_health_snapshot() -> dict[str, Any]:
         "top_k_default": settings.get("top_k_default", 5),
         "threshold_default": settings.get("threshold_default", 0.0),
     }
+
+
+def shutdown_semantixel_runtime() -> None:
+    """Release Semantixel runtime resources for clean backend shutdown."""
+    with _lock:
+        runtime = _state.get("runtime")
+
+        if runtime is not None:
+            try:
+                from semantixel.services.model_manager import model_manager
+
+                model_manager.unload_all()
+            except (ImportError, RuntimeError, OSError, ValueError):
+                logger.exception("Failed while unloading Semantixel models")
+
+            # Drop references to allow GC and GPU memory release.
+            runtime.search_service = None
+            runtime.index_service = None
+
+        _state["runtime"] = None
+        _state["runtime_error"] = None
+        logger.info("Semantixel runtime shut down")
 
 
 rebuild_semantixel_runtime(raise_on_error=False)

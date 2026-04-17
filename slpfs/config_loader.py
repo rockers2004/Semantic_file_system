@@ -20,11 +20,49 @@ import yaml
 import logging
 import os
 try:
-    from .config import SLPFSConfig
+    from .config import SLPFSConfig, MultimodalConfig
 except ImportError:
-    from config import SLPFSConfig
+    from config import SLPFSConfig, MultimodalConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _as_bool(value, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def _as_int(value, default: int, min_value: int | None = None) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    if min_value is not None and parsed < min_value:
+        return default
+    return parsed
+
+
+def _as_float(value, default: float, min_value: float | None = None) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if min_value is not None and parsed < min_value:
+        return default
+    return parsed
+
+
+def _as_list_of_str(value, default: list[str]) -> list[str]:
+    if not isinstance(value, list):
+        return default
+    return [item for item in value if isinstance(item, str)]
 
 
 def load_config_from_yaml(yaml_path: str = "config.yaml") -> SLPFSConfig:
@@ -36,8 +74,11 @@ def load_config_from_yaml(yaml_path: str = "config.yaml") -> SLPFSConfig:
         return SLPFSConfig()
     
     try:
-        with open(yaml_path, 'r') as f:
+        with open(yaml_path, 'r', encoding='utf-8') as f:
             yaml_config = yaml.safe_load(f)
+
+        if not isinstance(yaml_config, dict):
+            yaml_config = {}
         
         config = SLPFSConfig()
         
@@ -63,11 +104,37 @@ def load_config_from_yaml(yaml_path: str = "config.yaml") -> SLPFSConfig:
         if 'features' in yaml_config:
             config.enable_versioning = yaml_config['features'].get('enable_versioning', False)
             config.enable_redis = yaml_config['features'].get('enable_redis', False)
+
+        multimodal_yaml = yaml_config.get('multimodal', {})
+        if isinstance(multimodal_yaml, dict):
+            current = config.multimodal
+            config.multimodal = MultimodalConfig(
+                enabled=_as_bool(multimodal_yaml.get('enabled'), current.enabled),
+                db_path=multimodal_yaml.get('db_path', current.db_path),
+                include_directories=_as_list_of_str(
+                    multimodal_yaml.get('include_directories'),
+                    current.include_directories,
+                ),
+                exclude_directories=_as_list_of_str(
+                    multimodal_yaml.get('exclude_directories'),
+                    current.exclude_directories,
+                ),
+                top_k_default=_as_int(
+                    multimodal_yaml.get('top_k_default'),
+                    current.top_k_default,
+                    min_value=1,
+                ),
+                threshold_default=_as_float(
+                    multimodal_yaml.get('threshold_default'),
+                    current.threshold_default,
+                    min_value=0.0,
+                ),
+            )
         
         logger.info("Configuration loaded from %s", yaml_path)
         return config
     
-    except Exception as e:
+    except (OSError, yaml.YAMLError, TypeError, ValueError):
         logger.exception("Error loading config")
         logger.info("Using default configuration")
         return SLPFSConfig()

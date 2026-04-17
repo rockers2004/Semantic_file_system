@@ -1,10 +1,16 @@
-import cv2
 from PIL import Image
 import os
 from semantixel.core.logging import logger
 
+try:
+    import cv2
+except ModuleNotFoundError:
+    cv2 = None
+
 def get_histogram(frame):
     """Calculates and normalizes the HSV histogram for a given frame."""
+    if cv2 is None:
+        return None
     if frame is None:
         return None
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -28,6 +34,10 @@ def extract_frames_in_memory(video_path, fps=0.5, similarity_threshold=0.6):
     
     Yields dicts with 'image' (PIL.Image) and 'timestamp' (float).
     """
+    if cv2 is None:
+        logger.warning("OpenCV is not installed. Video frame extraction will be skipped.")
+        return
+
     if not os.path.exists(video_path):
         logger.error(f"Video file not found at {video_path}")
         return

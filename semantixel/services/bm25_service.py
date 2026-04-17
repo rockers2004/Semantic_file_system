@@ -1,8 +1,12 @@
 import os
 import pickle
 from typing import List
-from rank_bm25 import BM25Okapi
 from semantixel.core.logging import logger
+
+try:
+    from rank_bm25 import BM25Okapi
+except ModuleNotFoundError:
+    BM25Okapi = None
 
 class BM25Service:
     """
@@ -58,6 +62,13 @@ class BM25Service:
         if not self.documents:
             logger.warning("No documents to index for BM25")
             return
+
+        if BM25Okapi is None:
+            logger.warning("rank_bm25 is not installed. Falling back to simple keyword search.")
+            self.bm25 = None
+            if save:
+                self.save()
+            return
         
         # Tokenize all documents (simple whitespace tokenization for now)
         tokenized_docs = [doc.lower().split() for doc in self.documents]
@@ -71,10 +82,10 @@ class BM25Service:
         """
         Search for documents matching the query.
         """
-        if self.bm25 is None:
-            return []
-        
         tokens = query.lower().split()
+        if self.bm25 is None:
+            return self._search_without_bm25(tokens, top_k, media_type)
+
         scores = self.bm25.get_scores(tokens)
         
         results = []
@@ -93,6 +104,29 @@ class BM25Service:
                 
         results.sort(key=lambda x: x[1], reverse=True)
         return [doc_id for doc_id, score in results[:top_k]]
+
+    def _search_without_bm25(self, tokens: List[str], top_k: int, media_type: str) -> List[str]:
+        if not tokens:
+            return []
+
+        results = []
+        for i, text in enumerate(self.documents):
+            text_lower = text.lower()
+            score = sum(1 for token in tokens if token in text_lower)
+            if score <= 0:
+                continue
+
+            doc_id = self.doc_ids[i]
+            is_video = ":::" in doc_id
+            if media_type == "image" and is_video:
+                continue
+            if media_type == "video" and not is_video:
+                continue
+
+            results.append((doc_id, float(score)))
+
+        results.sort(key=lambda x: x[1], reverse=True)
+        return [doc_id for doc_id, _score in results[:top_k]]
     
     def save(self):
         """Persist index to disk"""

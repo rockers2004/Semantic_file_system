@@ -46,6 +46,11 @@ export interface SearchResult {
   score: number;
   snippet: string;
   is_dir: false;
+  source?: string;
+  kind?: string;
+  media_type?: string;
+  timestamp?: number;
+  composite_id?: string;
 }
 
 interface SearchResponse {
@@ -54,6 +59,10 @@ interface SearchResponse {
     query: string;
     total: number;
     results: SearchResult[];
+    source?: string;
+    search_status?: string;
+    error?: string;
+    warnings?: string[];
   };
   error?:  { code?: string; message?: string; details?: unknown } | null;
   meta?: unknown;
@@ -64,6 +73,11 @@ export interface CommandResultItem {
   score: number;
   snippet: string;
   is_dir: false;
+  source?: string;
+  kind?: string;
+  media_type?: string;
+  timestamp?: number;
+  composite_id?: string;
 }
 
 interface CommandResponse {
@@ -168,7 +182,7 @@ export async function updateRootPath(rootPath: string): Promise<ConfigResponse["
   return json.data;
 }
 
-export async function searchFiles(query: string, k = 10, mode = "normal"): Promise<SearchResponse["data"]> {
+export async function searchFiles(query: string, k = 10, mode = "general"): Promise<SearchResponse["data"]> {
   const response = await fetch(`${BACKEND_URL}/api/v1/search`, {
     method: "POST",
     headers: { "Content-Type":"application/json" },

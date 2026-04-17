@@ -6,7 +6,7 @@ interface StartupScreenProps {
 }
 
 export function StartupScreen({ onReady }: StartupScreenProps) {
-  const [status, setStatus] = useState("Starting backend...");
+  const [status, setStatus] = useState("Starting backend process...");
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -19,7 +19,7 @@ export function StartupScreen({ onReady }: StartupScreenProps) {
           onReady();  // Notify parent -> ready to show main app
           break;
         } else {
-          setStatus("Waiting for backend... (ensure backend is running)");
+          setStatus("Waiting for backend to initialize...");
         }
         // If not ready, wait 500ms and try again
         await new Promise((resolve) => setTimeout(resolve, 500));

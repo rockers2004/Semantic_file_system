@@ -64,6 +64,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+If you want Semantixel multimodal search enabled, also install:
+
+```bash
+pip install -r requirements-multimodal-phase1.txt
+```
+
 **Dependencies:**
 - `chromadb==0.4.22` - Vector database for embeddings
 - `sentence-transformers==2.3.1` - Lightweight embedding model

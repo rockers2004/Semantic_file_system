@@ -3,7 +3,17 @@ import yaml
 import shutil
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
+try:
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+except ModuleNotFoundError:
+    # Allow Semantixel to boot with YAML defaults even when env-settings extras
+    # were not installed yet.
+    class BaseSettings(BaseModel):
+        pass
+
+    def SettingsConfigDict(**kwargs):
+        return kwargs
 
 class CLIPConfig(BaseModel):
     HF_transformers_clip: str = "openai/clip-vit-base-patch32"
@@ -33,7 +43,8 @@ class SemantixelConfig(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="SEMANTIXEL_",
         env_nested_delimiter="__",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore",
     )
 
 def load_config(config_path: str = "config.yaml", default_path: str = "config.default.yaml") -> SemantixelConfig:
@@ -53,8 +64,37 @@ def load_config(config_path: str = "config.yaml", default_path: str = "config.de
 
     with open(config_path, "r") as f:
         config_data = yaml.safe_load(f) or {}
-    
-    return SemantixelConfig(**config_data)
+
+    if not isinstance(config_data, dict):
+        return SemantixelConfig()
+
+    # This repo stores a shared app config at the root. Semantixel should only
+    # consume the keys that belong to its own schema and ignore the rest.
+    supported_top_level = {
+        "batch_size",
+        "clip",
+        "deep_scan",
+        "exclude_directories",
+        "include_directories",
+        "ocr_provider",
+        "port",
+        "scan_method",
+        "text_embed",
+    }
+
+    semantixel_data = {
+        key: value
+        for key, value in config_data.items()
+        if key in supported_top_level
+    }
+
+    multimodal_section = config_data.get("multimodal")
+    if isinstance(multimodal_section, dict):
+        for key in ("include_directories", "exclude_directories"):
+            if key in multimodal_section:
+                semantixel_data[key] = multimodal_section[key]
+
+    return SemantixelConfig(**semantixel_data)
 
 # Global config instance
 config = load_config()

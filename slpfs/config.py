@@ -17,8 +17,20 @@ it can be replaced at runtime by loading values from `config.yaml` via
 """
 
 import os
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List
+
+
+@dataclass
+class MultimodalConfig:
+    """Configuration for multimodal indexing and retrieval."""
+
+    enabled: bool = False
+    db_path: str = "./db_multimodal"
+    include_directories: List[str] = field(default_factory=list)
+    exclude_directories: List[str] = field(default_factory=list)
+    top_k_default: int = 5
+    threshold_default: float = 0.0
 
 @dataclass
 class SLPFSConfig:
@@ -46,11 +58,15 @@ class SLPFSConfig:
     # Version control (DISABLED - no Redis needed)
     enable_versioning: bool = False
     enable_redis:  bool = False
+
+    # Multimodal settings
+    multimodal: MultimodalConfig = field(default_factory=MultimodalConfig)
     
     def __post_init__(self):
         """Create directories if they don't exist"""
         os.makedirs(self.root_dir, exist_ok=True)
         os.makedirs(self.vector_db_dir, exist_ok=True)
+        os.makedirs(self.multimodal.db_path, exist_ok=True)
 
 # Global config instance
 config = SLPFSConfig()

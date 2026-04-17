@@ -2,18 +2,22 @@ import torch
 import torch.nn.functional as F
 import time
 import os
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Protocol
 from semantixel.services.model_manager import model_manager
 from semantixel.services.index_service import IndexService
-from semantixel.services.face_service import FaceService
 from semantixel.core.logging import logger
+
+
+class FaceServiceLike(Protocol):
+    def search_by_name(self, name_query: str, threshold: float = 0.6) -> List[str]:
+        ...
 
 class SearchService:
     """
     Core search logic for semantic retrieval and graph generation.
     """
     
-    def __init__(self, index_service: IndexService, face_service: FaceService):
+    def __init__(self, index_service: IndexService, face_service: FaceServiceLike):
         self.index_service = index_service
         self.face_service = face_service
         self.image_collection = index_service.image_collection
