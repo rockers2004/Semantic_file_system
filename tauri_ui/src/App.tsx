@@ -13,7 +13,6 @@ function App() {
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [rootPathInput, setRootPathInput] = useState("");
   const [currentRootPath, setCurrentRootPath] = useState("");
-  const [rootStatus, setRootStatus] = useState("");
   const [rootError, setRootError] = useState("");
   const [isUpdatingRoot, setIsUpdatingRoot] = useState(false);
   const [treeRefreshToken, setTreeRefreshToken] = useState(0);
@@ -47,13 +46,11 @@ function App() {
     const nextRoot = rootPathInput.trim();
     if (!nextRoot) {
       setRootError("Root path cannot be empty");
-      setRootStatus("");
       return;
     }
 
     setIsUpdatingRoot(true);
     setRootError("");
-    setRootStatus("");
 
     try {
       const data = await updateRootPath(nextRoot);
@@ -61,7 +58,6 @@ function App() {
       setRootPathInput(data.root_path);
       setSelectedFile("");
       setTreeRefreshToken((prev) => prev + 1);
-      setRootStatus("Root path updated successfully.");
     } catch (err) {
       setRootError(err instanceof Error ? err.message : "Failed to set root path");
     } finally {
@@ -71,7 +67,6 @@ function App() {
 
   const handleBrowseRoot = async () => {
     setRootError("");
-    setRootStatus("");
 
     try {
       const selected = await open({

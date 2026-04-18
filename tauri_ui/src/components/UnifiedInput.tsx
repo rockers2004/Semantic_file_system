@@ -157,7 +157,6 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [inputText, setInputText] = useState("");
-  const [action, setAction] = useState("");
   const [results, setResults] = useState<CommandResultItem[]>([]);
 
   const presetConfig = ACTION_PRESETS[preset];
@@ -186,7 +185,6 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
       setError(presetConfig.requiresBody ? "Please enter the rest of the request." : "Please enter a command or search query.");
       setMessage("");
       setInputText("");
-      setAction("");
       setResults([]);
       return;
     }
@@ -200,7 +198,6 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
       if (presetConfig.route === "search") {
         const data = await searchFiles(trimmed, 10, "general");
         setMessage(getSearchMessage(data.total, "SLPFS", data.error));
-        setAction("search");
         setResults(data.results);
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
@@ -208,7 +205,6 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
       } else if (presetConfig.route === "multimodal") {
         const data = await searchFiles(trimmed, 10, "multimodal");
         setMessage(getSearchMessage(data.total, "multimodal", data.error));
-        setAction("image");
         setResults(data.results);
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
@@ -216,7 +212,6 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
       } else if (presetConfig.route === "command") {
         const data = await runCommand(composedInput);
         setMessage(data.message);
-        setAction(data.parsed?.action || "");
         setResults(data.results);
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
@@ -224,7 +219,6 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
       } else if (mode === "general") {
         const data = await runCommand(trimmed);
         setMessage(data.message);
-        setAction(data.parsed?.action || "");
         setResults(data.results);
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
@@ -232,7 +226,6 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
       } else {
         const data = await searchFiles(trimmed, 10, mode);
         setMessage(getSearchMessage(data.total, mode, data.error));
-        setAction(mode === "multimodal" ? "image" : "search");
         setResults(data.results);
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
@@ -244,7 +237,6 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
       setError(err instanceof Error ? err.message : "Failed to run input");
       setMessage("");
       setInputText("");
-      setAction("");
       setResults([]);
     }
   };

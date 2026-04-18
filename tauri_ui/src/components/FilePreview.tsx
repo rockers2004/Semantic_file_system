@@ -124,9 +124,9 @@ export function FilePreview({ selectedPath }: FilePreviewProps) {
 
     setOpenError("");
     try {
-      await invoke("open_with_dialog", { path: selectedPath });
+      await invoke("open_in_default_app", { path: selectedPath });
     } catch (err) {
-      setOpenError(err instanceof Error ? err.message : String(err || "Failed to open app chooser for this file"));
+      setOpenError(err instanceof Error ? err.message : String(err || "Failed to open this file in the default app"));
     }
   };
 
@@ -165,6 +165,7 @@ export function FilePreview({ selectedPath }: FilePreviewProps) {
           </pre>
           <div className="file-preview-meta" style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--text-dim)', paddingTop: '8px' }}>
             <span>{(size ?? 0) < 1024 ? `${size} B` : `${Math.round((size ?? 0) / 1024)} KB`}</span>
+            <span>{encoding || "Unknown encoding"}</span>
             <span>{modified ? new Date(modified).toLocaleString() : "Unknown date"}</span>
           </div>
         </div>

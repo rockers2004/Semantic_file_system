@@ -9,36 +9,49 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-fn open_with_dialog(path: String) -> Result<(), String> {
+fn open_in_default_app(path: String) -> Result<(), String> {
+    let resolved_path = PathBuf::from(&path);
+    if !resolved_path.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+
+    let normalized = resolved_path
+        .canonicalize()
+        .unwrap_or(resolved_path)
+        .to_string_lossy()
+        .to_string();
+
     #[cfg(target_os = "windows")]
     {
-        use std::path::PathBuf;
-        use std::process::Command;
-
-        let resolved_path = PathBuf::from(&path);
-        if !resolved_path.exists() {
-            return Err(format!("File does not exist: {}", path));
-        }
-
-        let normalized = resolved_path
-            .canonicalize()
-            .unwrap_or(resolved_path)
-            .to_string_lossy()
-            .to_string();
-
-        Command::new("rundll32.exe")
-            .arg("shell32.dll,OpenAs_RunDLL")
-            .arg(normalized)
+        Command::new("cmd")
+            .arg("/C")
+            .arg("start")
+            .arg("")
+            .arg(&normalized)
             .spawn()
-            .map_err(|e| format!("Failed to launch Open With dialog: {}", e))?;
+            .map_err(|e| format!("Failed to open file in the default Windows app: {}", e))?;
 
         Ok(())
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
-        let _ = path;
-        Err("Open With dialog is only supported on Windows in this app".to_string())
+        Command::new("open")
+            .arg(&normalized)
+            .spawn()
+            .map_err(|e| format!("Failed to open file in the default macOS app: {}", e))?;
+
+        Ok(())
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg(&normalized)
+            .spawn()
+            .map_err(|e| format!("Failed to open file in the default app: {}", e))?;
+
+        Ok(())
     }
 }
 
@@ -101,7 +114,7 @@ pub fn run() {
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, open_with_dialog])
+        .invoke_handler(tauri::generate_handler![greet, open_in_default_app])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(move |_app_handle, event| {

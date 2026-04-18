@@ -6,7 +6,6 @@ interface StartupScreenProps {
 }
 
 export function StartupScreen({ onReady }: StartupScreenProps) {
-  const [status, setStatus] = useState("Waking up...");
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -14,12 +13,9 @@ export function StartupScreen({ onReady }: StartupScreenProps) {
       while (!isReady) {
         const health = await checkHealth();
         if (health && health.ok) {
-          setStatus("Ready to go!");
           setIsReady(true);
           onReady();  // Notify parent -> ready to show main app
           break;
-        } else {
-          setStatus("Waking up...");
         }
         // If not ready, wait 500ms and try again
         await new Promise((resolve) => setTimeout(resolve, 500));
