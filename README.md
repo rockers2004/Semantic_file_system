@@ -68,9 +68,6 @@ python -m venv myenv
 
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r backend_api\requirements.txt
-# Optional multimodal dependencies:
-pip install -r requirements-multimodal-phase1.txt
 
 cd tauri_ui
 npm install
@@ -109,9 +106,6 @@ source myenv/bin/activate
 
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r backend_api/requirements.txt
-# Optional multimodal dependencies:
-pip install -r requirements-multimodal-phase1.txt
 
 cd tauri_ui
 npm install
@@ -159,9 +153,6 @@ source myenv/bin/activate
 
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r backend_api/requirements.txt
-# Optional multimodal dependencies:
-pip install -r requirements-multimodal-phase1.txt
 
 cd tauri_ui
 npm install
