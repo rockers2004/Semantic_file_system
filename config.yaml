@@ -1,8 +1,15 @@
 directories:
-  root_dir: C:\Users\Omsai\Desktop\lsfs_test
+  romultimodal:
+  enabled: true
+  db_path: ./db_multimodal
+  include_directories:
+  - /Users/ssgmcollege/Desktop/lsfs_test_2
+  exclude_directories: []
+  top_k_default: 5
+  threshold_default: 0.0/Users/ssgmcollege/Desktop/lsfs_test_2
   vector_db_dir: ./.lsfs_db
 ollama:
-  model: qwen2.5:3b
+  model: mistral:7b-instruct
   url: http://localhost:11434
 embedding:
   model: all-mpnet-base-v2
@@ -19,7 +26,7 @@ multimodal:
   enabled: true
   db_path: ./db_multimodal
   include_directories:
-    - C:\Users\Omsai\Desktop\lsfs_test
+    - /Users/ssgmcollege/Desktop/lsfs_test_2
   exclude_directories: []
   top_k_default: 5
   threshold_default: 0.0

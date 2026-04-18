@@ -78,20 +78,40 @@ fn start_python_backend() -> Result<Child, String> {
         return Err(format!("Backend script not found: {}", backend_script.display()));
     }
 
-    let venv_python = project_root.join("myenv").join("Scripts").join("python.exe");
-    let python_cmd = if venv_python.exists() {
-        venv_python
+    // Prefer platform-specific virtualenv paths first, then try system python3 then python.
+    let venv_python_win = project_root.join("myenv").join("Scripts").join("python.exe");
+    let venv_python_unix = project_root.join("myenv").join("bin").join("python3");
+
+    let candidates: Vec<PathBuf> = if venv_python_win.exists() {
+        vec![venv_python_win]
+    } else if venv_python_unix.exists() {
+        vec![venv_python_unix]
     } else {
-        PathBuf::from("python")
+        vec![PathBuf::from("python3"), PathBuf::from("python")]
     };
 
-    Command::new(python_cmd)
-        .arg(backend_script)
-        .current_dir(project_root)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| format!("Failed to start Python backend: {}", e))
+    // Try each candidate until one successfully spawns. If a non-NotFound error
+    // occurs, return it immediately.
+    for cmd in candidates {
+        match Command::new(&cmd)
+            .arg(&backend_script)
+            .current_dir(&project_root)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(child) => return Ok(child),
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    // Try next candidate
+                    continue;
+                }
+                return Err(format!("Failed to start Python backend: {}", e));
+            }
+        }
+    }
+
+    Err("Failed to start Python backend: no python executable found in PATH".to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

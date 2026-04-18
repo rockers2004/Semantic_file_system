@@ -37,7 +37,7 @@ class SLPFSConfig:
     """Configuration for Local SLPFS"""
     
     # Directories
-    root_dir: str = "C:/Users/Taslim/OneDrive/Desktop/lsfs-test"
+    root_dir: str = "/Users/ssgmcollege/Desktop/lsfs_test_2"
     # Where ChromaDB stores its data; keep relative to project root by default.
     vector_db_dir: str = "./.lsfs_db"
     
