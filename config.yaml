@@ -1,30 +1,32 @@
-# Local LSFS Configuration
-
-# Directories
 directories:
-  root_dir: "C:/Users/Omsai/Desktop/lsfs_test"
-  vector_db_dir: "./.lsfs_db"
-
-# LLM Settings
+  romultimodal:
+  enabled: true
+  db_path: ./db_multimodal
+  include_directories:
+  - /Users/ssgmcollege/Desktop/lsfs_test_2
+  exclude_directories: []
+  top_k_default: 5
+  threshold_default: 0.0/Users/ssgmcollege/Desktop/lsfs_test_2
+  vector_db_dir: ./.lsfs_db
 ollama:
-  model: "qwen3:14b" # Change to your preferred model
-  url: "http://localhost:11434"
-
-# Embedding Settings
+  model: mistral:7b-instruct
+  url: http://localhost:11434
 embedding:
-  model: "all-mpnet-base-v2" # Lightweight and fast
-
-# Search Settings
+  model: all-mpnet-base-v2
 search:
   default_results: 5
   max_file_size_mb: 10
-
-# Performance
 performance:
   enable_caching: true
-
-# Features (DISABLED - No Redis needed)
 features:
   enable_versioning: false
   enable_redis: false
   enable_rollback: false
+multimodal:
+  enabled: true
+  db_path: ./db_multimodal
+  include_directories:
+    - /Users/ssgmcollege/Desktop/lsfs_test_2
+  exclude_directories: []
+  top_k_default: 5
+  threshold_default: 0.0

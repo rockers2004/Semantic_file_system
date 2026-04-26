@@ -1,14 +1,31 @@
-# Core dependencies
-chromadb==0.4.22
+# Core API and runtime
+fastapi==0.129.0
+uvicorn[standard]==0.30.6
+pydantic==2.7.1
+pydantic-settings==2.2.1
+
+# Core semantic search stack
+chromadb==0.4.24
 sentence-transformers==2.3.1
-requests==2.31.0
+transformers==4.53.3
+rank-bm25==0.2.2
+scikit-learn==1.7.1
+
+# Multimodal and vision
+open-clip-torch==3.0.0
+timm==1.0.19
+einops==0.8.0
+opencv-python-headless==4.10.0.84
+pillow==10.4.0
+ftfy==6.3.1
+regex==2024.11.6
 
 # Terminal UI
 prompt-toolkit==3.0.43
 rich==13.7.0
 
-# Utilities
-numpy==1.24.3
-
-# Optional:  For better tokenization
+# General utilities
+numpy==1.26.4
+requests==2.32.4
+pypdf==5.4.0
 nltk==3.8.1

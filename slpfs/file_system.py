@@ -1,26 +1,48 @@
+"""
+slpfs/file_system.py
+
+Handles semantic indexing, searching, standard file operations, stats/reindexing, and natural language command routing through as LLM
+
+Responsibilities:
+- Mounting and indexing the root directory on initialization.
+- Create, read, write, delete, move, and copy files/directories with automatic vector store updates.
+- Semantic search using the vector store with optional keyword filtering.
+- Re-indexing all files and providing system statistics.
+- Processing natural language commands by parsing them with the LLM and executing the corresponding file operations.
+
+required components:
+- config: SLPFSConfig instance for settings
+- vector_store: VectorStore instance for embedding and searching file content
+- llm: OllamaHandler instance for parsing commands and summarizing results
+
+version: 1.0.0
+"""
+
 import os
 import shutil
-from typing import Dict, Any, List, Optional
+import logging
+from typing import Dict, Any, Optional
 from datetime import datetime
-from . vector_store import VectorStore
-from .llm_handler import OllamaHandler
-from .config import LSFSConfig
+from slpfs.vector_store import VectorStore
+from slpfs.llm_handler import OllamaHandler
+from slpfs.config import  SLPFSConfig
 
-class LocalLSFS:
+logger = logging.getLogger(__name__)
+
+class LocalSLPFS:
     """Local LLM-based Semantic File System"""
     
-    def __init__(self, config: LSFSConfig):
+    def __init__(self, config: SLPFSConfig):
         self.config = config
         self.root_dir = config.root_dir
         
-        print("=" * 60)
-        print("🚀 Initializing Local LSFS")
-        print("=" * 60)
+        logger.info("Initializing Local SLPFS")
         
         # Initialize components
         self.vector_store = VectorStore(
             config.vector_db_dir,
-            config.embedding_model
+            config.embedding_model,
+            config.max_file_size_mb,
         )
         
         self.llm = OllamaHandler(
@@ -31,21 +53,19 @@ class LocalLSFS:
         # Mount root directory
         self._mount_root()
         
-        print("=" * 60)
-        print("✅ LSFS Ready!")
-        print("=" * 60)
+        logger.info("SLPFS Ready")
     
     def _mount_root(self):
         """Mount and index root directory"""
-        print(f"\n📁 Mounting root directory: {self.root_dir}")
+        logger.info("Mounting root directory: %s", self.root_dir)
         
         if os.path.exists(self.root_dir):
             # Re-index existing files
             stats = self. vector_store.index_directory(self.root_dir)
-            print(f"✅ Mounted with {stats['indexed']} files indexed")
+            logger.info("Mounted with %s files indexed", stats["indexed"])
         else:
             os.makedirs(self.root_dir, exist_ok=True)
-            print("✅ Created new root directory")
+            logger.info("Created new root directory")
     
     def create_file(self, file_name: str, content: str = "") -> Dict[str, Any]:
         """Create a new file"""
@@ -71,6 +91,7 @@ class LocalLSFS:
             }
         
         except Exception as e:
+            logger.error("Error creating file: %s", e)
             return {"success": False, "error": str(e)}
     
     def create_directory(self, dir_name: str) -> Dict[str, Any]:
@@ -86,6 +107,7 @@ class LocalLSFS:
             }
         
         except Exception as e: 
+            logger.error("Error creating directory: %s", e)
             return {"success": False, "error": str(e)}
     
     def write_file(self, file_name: str, content: str, append: bool = False) -> Dict[str, Any]:
@@ -301,25 +323,52 @@ class LocalLSFS:
         
         # Parse command with LLM
         parsed = self.llm.parse_command(user_input)
+        raw_ollama_output = (
+            parsed.get('raw_ollama_output')
+            or parsed.get('parameters', {}).get('raw_ollama_output')
+        )
 
         # Surface LLM/connection errors directly
         if parsed.get('operation') == 'error':
             return {
                 "success": False,
-                "error": parsed.get('parameters', {}).get('message', 'LLM request failed')
+                "error": parsed.get('parameters', {}).get('message', 'LLM request failed'),
+                "ollama_output": raw_ollama_output,
             }
         
         if parsed['confidence'] < 0.5:
             return {
                 "success":  False,
-                "error": "Could not understand command.  Try 'help' for examples."
+                "error": "Could not understand command.  Try 'help' for examples.",
+                "ollama_output": raw_ollama_output,
             }
         
         operation = parsed['operation']
+        # Normalize common aliases from model output.
+        operation_aliases = {
+            "find": "search",
+            "remove": "delete",
+            "mkdir": "create_dir",
+            "make_dir": "create_dir",
+        }
+        operation = operation_aliases.get(operation, operation)
         params = parsed. get('parameters', {})
+
+        if operation == 'chat':
+            return {
+                "success": True,
+                "message": params.get('message', 'I can help with file operations and search.'),
+                "operation": operation,
+                "parameters": params,
+                "results": [],
+                "ollama_output": raw_ollama_output,
+            }
         
         # Execute operation
         result = self._execute_operation(operation, params)
+        result['operation'] = operation
+        result['parameters'] = params
+        result['ollama_output'] = raw_ollama_output
         
         # Generate friendly response
         if result. get('success'):
