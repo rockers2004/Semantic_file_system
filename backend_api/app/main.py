@@ -91,6 +91,9 @@ class SearchRequest(BaseModel):
     query: str
     k: int = Field(default=10, ge=1, le=50)
     mode: str = "general"
+    media_type: str = "all"
+    top_k: Optional[int] = Field(default=None, ge=1, le=50)
+    threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
     @field_validator("query")
     @classmethod
@@ -98,6 +101,14 @@ class SearchRequest(BaseModel):
         if not value or not value.strip():
             raise ValueError("Query cannot be empty")
         return value.strip()
+
+    @field_validator("media_type")
+    @classmethod
+    def validate_media_type(cls, value: str) -> str:
+        normalized = (value or "all").strip().lower()
+        if normalized not in {"all", "image", "video"}:
+            raise ValueError("media_type must be one of: all, image, video")
+        return normalized
 
 
 class CommandRequest(BaseModel):
@@ -350,6 +361,9 @@ async def search_files(request: Request, payload: SearchRequest):
             query=payload.query.strip(),
             k=payload.k,
             mode=payload.mode,
+            top_k=payload.top_k,
+            threshold=payload.threshold,
+            media_type=payload.media_type,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -24,23 +24,26 @@ class SearchService:
         self.text_collection = index_service.text_collection
         self.bm25_service = index_service.bm25_service
 
-    def _process_item_id(self, item_id: str) -> Dict[str, Any]:
+    def _process_item_id(self, item_id: str, score: Optional[float] = None) -> Dict[str, Any]:
         """Format an ID to JSON results."""
         if ":::" in item_id:
             video_path, timestamp = item_id.split(":::")
-            return {
+            item = {
                 "path": video_path,
                 "type": "video",
                 "timestamp": float(timestamp),
                 "composite_id": item_id
             }
         else:
-            return {
+            item = {
                 "path": item_id,
                 "type": "image"
             }
+        if score is not None:
+            item["score"] = float(score)
+        return item
 
-    def semantic_text_search(self, query: str, top_k: int = 5, threshold: float = 0.0, media_type: str = "image") -> List[Dict[str, Any]]:
+    def semantic_text_search(self, query: str, top_k: int = 5, threshold: float = 0.0, media_type: str = "all") -> List[Dict[str, Any]]:
         """
         Performs semantic search on images using CLIP text embeddings.
         """
@@ -104,7 +107,7 @@ class SearchService:
                     continue
                 video_counts[base_video_path] = count + 1
             
-            final_results.append(self._process_item_id(p))
+            final_results.append(self._process_item_id(p, s))
             
             if len(final_results) >= top_k:
                 break
@@ -161,7 +164,7 @@ class SearchService:
         logger.info(f"Generated Semantic Graph: {len(nodes)} nodes, {len(links)} edges in {time.time()-t0:.3f}s")
         return {"nodes": nodes, "links": links}
 
-    def integrated_face_search(self, query: str, top_k: int = 10, threshold: float = 0.3, media_type: str = "image") -> List[Dict[str, Any]]:
+    def integrated_face_search(self, query: str, top_k: int = 10, threshold: float = 0.3, media_type: str = "all") -> List[Dict[str, Any]]:
         """
         Combines face recognition by name and semantic context search.
         Query format example: "Find Karunya playing cricket"

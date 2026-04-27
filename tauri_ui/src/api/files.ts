@@ -182,11 +182,29 @@ export async function updateRootPath(rootPath: string): Promise<ConfigResponse["
   return json.data;
 }
 
-export async function searchFiles(query: string, k = 10, mode = "general"): Promise<SearchResponse["data"]> {
+type SearchOptions = {
+  mediaType?: "all" | "image" | "video";
+  topK?: number;
+  threshold?: number;
+};
+
+export async function searchFiles(
+  query: string,
+  k = 10,
+  mode = "general",
+  options: SearchOptions = {},
+): Promise<SearchResponse["data"]> {
   const response = await fetch(`${BACKEND_URL}/api/v1/search`, {
     method: "POST",
     headers: { "Content-Type":"application/json" },
-    body: JSON.stringify({ query, k, mode }),
+    body: JSON.stringify({
+      query,
+      k,
+      mode,
+      media_type: options.mediaType ?? "all",
+      top_k: options.topK,
+      threshold: options.threshold,
+    }),
   });
   
   if(!response.ok) {

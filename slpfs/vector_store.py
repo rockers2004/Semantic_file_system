@@ -16,6 +16,7 @@ Responsibilities:
 """
 import hashlib
 import os
+import re
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import mimetypes
@@ -36,6 +37,23 @@ logger = logging.getLogger(__name__)
 INDEX_SCHEMA_VERSION = 3
 MAX_EMBED_CHARS = 50000
 LARGE_PDF_MAX_PAGES = 40
+CODE_EXTENSIONS = {
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".c", ".cc", ".cpp", ".h", ".hpp",
+    ".cs", ".go", ".rs", ".php", ".rb", ".swift", ".kt", ".kts", ".scala", ".sh",
+    ".ps1", ".sql", ".html", ".css",
+}
+SEARCH_STOPWORDS = {
+    "a", "an", "and", "are", "by", "containing", "contains", "file", "files", "find",
+    "for", "in", "inside", "me", "of", "on", "or", "search", "show", "that", "the",
+    "to", "with",
+}
+SEARCH_TOKEN_ALIASES = {
+    "logix": "logic",
+    "backtracking": "backtrack",
+    "backtracked": "backtrack",
+    "codes": "code",
+    "programs": "program",
+}
 
 
 class VectorStore:
@@ -121,6 +139,83 @@ class VectorStore:
         except Exception as e:
             logger.error("Error reading file %s: %s", file_path, e)
             return f"[Error reading file: {str(e)}]"
+
+    def _normalize_search_token(self, token: str) -> str:
+        token = SEARCH_TOKEN_ALIASES.get(token.lower(), token.lower())
+        if len(token) > 5 and token.endswith("ing"):
+            token = token[:-3]
+        elif len(token) > 4 and token.endswith("ed"):
+            token = token[:-2]
+        elif len(token) > 4 and token.endswith("s"):
+            token = token[:-1]
+        return SEARCH_TOKEN_ALIASES.get(token, token)
+
+    def _query_tokens(self, query: str) -> List[str]:
+        tokens = []
+        for raw in re.findall(r"[a-zA-Z0-9_+#]+", query.lower()):
+            token = self._normalize_search_token(raw)
+            if token and token not in SEARCH_STOPWORDS:
+                tokens.append(token)
+        return list(dict.fromkeys(tokens))
+
+    def _is_code_query(self, query: str, tokens: List[str]) -> bool:
+        query_lower = query.lower()
+        return any(
+            marker in tokens or marker in query_lower
+            for marker in ("code", "source", "script", "program", "python", ".py")
+        )
+
+    def _lexical_search_score(
+        self,
+        query: str,
+        tokens: List[str],
+        metadata: Dict[str, Any],
+        preview: str,
+    ) -> float:
+        if not tokens:
+            return 0.0
+
+        file_name = str(metadata.get("file_name", "") or "")
+        relative_path = str(metadata.get("relative_path", "") or "")
+        file_path = str(metadata.get("file_path", "") or "")
+        ext = os.path.splitext(file_name)[1].lower()
+        is_code_file = ext in CODE_EXTENSIONS
+        is_code_query = self._is_code_query(query, tokens)
+
+        content = preview
+        if is_code_file and file_path:
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as file:
+                    content = file.read()
+            except OSError:
+                content = preview
+
+        haystack = f"{file_name} {relative_path} {content}".lower()
+        normalized_haystack = " ".join(
+            self._normalize_search_token(token)
+            for token in re.findall(r"[a-zA-Z0-9_+#]+", haystack)
+        )
+
+        score = 0.0
+        generic_terms = {"code", "file", "source", "script", "program", "logic"}
+        specific_terms = [token for token in tokens if token not in generic_terms]
+
+        for token in tokens:
+            if token in normalized_haystack:
+                score += 0.18
+            if token in file_name.lower() or token in relative_path.lower():
+                score += 0.12
+
+        specific_hits = sum(1 for token in specific_terms if token in normalized_haystack)
+        score += specific_hits * 0.35
+
+        if is_code_query:
+            score += 0.40 if is_code_file else -0.25
+
+        if specific_terms and specific_hits == 0:
+            score -= 0.35
+
+        return score
     
     def index_file(self, file_path: str, root_dir: str) -> str:
         """Index a single file. Returns 'indexed', 'unchanged', or 'error'."""
@@ -220,6 +315,11 @@ class VectorStore:
         try:
             # Enhance query with keywords
             search_query = f"{query} {keywords}" if keywords else query
+            query_tokens = self._query_tokens(search_query)
+            is_code_query = self._is_code_query(search_query, query_tokens)
+            collection_count = self.collection.count()
+            if collection_count <= 0:
+                return []
             
             # Generate query embedding
             query_embedding = self.embedding_model.encode(search_query).tolist()
@@ -227,22 +327,33 @@ class VectorStore:
             # Search in ChromaDB
             results = self.collection. query(
                 query_embeddings=[query_embedding],
-                n_results=min(k, self.collection.count())
+                n_results=collection_count if is_code_query else min(max(k * 25, 100), collection_count)
             )
             
             # Format results
             formatted_results = []
             if results['ids'] and results['ids'][0]: 
                 for i in range(len(results['ids'][0])):
+                    metadata = results['metadatas'][0][i]
+                    preview = results['documents'][0][i][:200]
+                    semantic_score = 1 - results['distances'][0][i] if 'distances' in results else 1.0
+                    lexical_score = self._lexical_search_score(
+                        search_query,
+                        query_tokens,
+                        metadata,
+                        results['documents'][0][i],
+                    )
                     formatted_results.append({
-                        "file_path": results['metadatas'][0][i]['file_path'],
-                        "file_name": results['metadatas'][0][i]['file_name'],
-                        "relative_path": results['metadatas'][0][i]['relative_path'],
-                        "preview": results['documents'][0][i][:200],
-                        "score": 1 - results['distances'][0][i] if 'distances' in results else 1.0
+                        "file_path": metadata['file_path'],
+                        "file_name": metadata['file_name'],
+                        "relative_path": metadata['relative_path'],
+                        "preview": preview,
+                        "score": semantic_score + lexical_score,
+                        "semantic_score": semantic_score,
                     })
             
-            return formatted_results
+            formatted_results.sort(key=lambda item: item["score"], reverse=True)
+            return formatted_results[:k]
         
         except Exception as e: 
             logger.exception("Search error")

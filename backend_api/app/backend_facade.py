@@ -164,7 +164,7 @@ class BackendFacade:
         *,
         top_k: Optional[int] = None,
         threshold: Optional[float] = None,
-        media_type: str = "image",
+        media_type: str = "all",
     ) -> dict[str, Any]:
         resolved_mode = (mode or "general").strip().lower()
         if resolved_mode in {"general", "normal", "text", "semantic", "slpfs"}:

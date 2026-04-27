@@ -24,7 +24,7 @@ class IndexService:
             "texts", metadata={"hnsw:space": "cosine"}
         )
         self.bm25_service = BM25Service(index_path=os.path.join(db_path, "bm25_index.pkl"))
-        self.video_extensions = {".mp4", ".mkv", ".avi", ".mov"}
+        self.video_extensions = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".ogg"}
 
     def run_full_scan(self):
         """
