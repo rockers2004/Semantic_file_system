@@ -19,7 +19,7 @@ multimodal:
   enabled: true
   db_path: ./db_multimodal
   include_directories:
-    - C:\Users\Omsai\Desktop\lsfs_test
+  - C:\Users\Omsai\Desktop\lsfs_test
   exclude_directories: []
   top_k_default: 5
   threshold_default: 0.0

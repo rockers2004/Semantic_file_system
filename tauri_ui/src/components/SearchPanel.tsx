@@ -6,7 +6,7 @@ interface SearchPanelProps {
 }
 
 type SearchStatus = "idle" | "loading" | "error" | "results";
-type SearchMode = "general" | "multimodal" | "auto" | "hybrid";
+type SearchMode = "general" | "multimodal" | "image" | "video" | "auto" | "hybrid";
 
 export function SearchPanel({ setSelectedFile }: SearchPanelProps) {
     const [query, setQuery] = useState("");
@@ -60,7 +60,9 @@ export function SearchPanel({ setSelectedFile }: SearchPanelProps) {
                 />
                 <select value={mode} onChange={(e) => setMode(e.target.value as SearchMode)}>
                     <option value="general">General (SLPFS)</option>
-                    <option value="multimodal">Multimodal (Semantixel)</option>
+                    <option value="multimodal">Multimodal (Images + Videos)</option>
+                    <option value="image">Images only</option>
+                    <option value="video">Videos only</option>
                     <option value="auto">Auto</option>
                     <option value="hybrid">Hybrid</option>
                 </select>

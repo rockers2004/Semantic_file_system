@@ -235,6 +235,98 @@ python terminal.py
 
 Useful for debugging backend behavior without UI.
 
+## Backend Commands
+
+Run these from the repository root.
+
+### Install backend dependencies
+
+Windows PowerShell:
+
+```powershell
+.\myenv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+macOS/Linux:
+
+```bash
+source myenv/bin/activate
+pip install -r requirements.txt
+```
+
+### Start backend API in development
+
+Windows PowerShell:
+
+```powershell
+.\myenv\Scripts\Activate.ps1
+python -m uvicorn backend_api.app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+macOS/Linux:
+
+```bash
+source myenv/bin/activate
+python -m uvicorn backend_api.app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+### Start backend API without reload
+
+```bash
+python backend_api/app/main.py
+```
+
+### Run terminal client
+
+```bash
+python terminal.py
+```
+
+## Frontend Commands
+
+Run these from `tauri_ui/`.
+
+### Install frontend dependencies
+
+```bash
+npm install
+```
+
+### Start React frontend only
+
+This starts the Vite dev server on `http://localhost:1420`.
+
+```bash
+npm run dev
+```
+
+### Start desktop app in development
+
+This starts the Tauri desktop shell. The Rust side will also start the Python backend automatically when the app launches.
+
+```bash
+npm run tauri dev
+```
+
+### Build frontend assets
+
+```bash
+npm run build
+```
+
+### Preview the production frontend build
+
+```bash
+npm run preview
+```
+
+### Build desktop app bundle
+
+```bash
+npm run tauri build
+```
+
 ## API Endpoints (MVP)
 
 Base URL:

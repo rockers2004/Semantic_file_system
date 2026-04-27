@@ -11,6 +11,7 @@ type ActionPreset =
   | "auto"
   | "search"
   | "image"
+  | "video"
   | "create_file"
   | "create_dir"
   | "write"
@@ -27,6 +28,7 @@ type ActionConfig = {
   label: string;
   prefix: string;
   route: "auto" | "command" | "search" | "multimodal";
+  mediaType?: "all" | "image" | "video";
   requiresBody: boolean;
   placeholder: string;
 };
@@ -35,6 +37,7 @@ const ACTION_ORDER: ActionPreset[] = [
   "auto",
   "search",
   "image",
+  "video",
   "create_file",
   "create_dir",
   "write",
@@ -67,8 +70,17 @@ const ACTION_PRESETS: Record<ActionPreset, ActionConfig> = {
     label: "image",
     prefix: "image",
     route: "multimodal",
+    mediaType: "image",
     requiresBody: true,
     placeholder: "Describe the image you want to retrieve",
+  },
+  video: {
+    label: "video",
+    prefix: "video",
+    route: "multimodal",
+    mediaType: "video",
+    requiresBody: true,
+    placeholder: "Describe the video you want to retrieve",
   },
   create_file: {
     label: "create_file",
@@ -203,7 +215,9 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
           setSelectedFile(data.results[0].path);
         }
       } else if (presetConfig.route === "multimodal") {
-        const data = await searchFiles(trimmed, 10, "multimodal");
+        const data = await searchFiles(trimmed, 10, "multimodal", {
+          mediaType: presetConfig.mediaType ?? "all",
+        });
         setMessage(getSearchMessage(data.total, "multimodal", data.error));
         setResults(data.results);
         if (data.results.length > 0 && data.results[0].path) {

@@ -167,7 +167,7 @@ class SemantixelRuntimeService:
         query: str,
         top_k: Optional[int] = None,
         threshold: Optional[float] = None,
-        media_type: str = "image",
+        media_type: str = "all",
     ) -> list[dict[str, Any]]:
         """Search images/video frames with CLIP text embeddings."""
         if self.search_service is None:
