@@ -60,7 +60,7 @@ ollama pull qwen2.5:3b
 ### Windows (PowerShell)
 
 ```powershell
-git clone https://github.com/taslim121/Semantic_file_system.git
+git clone https://github.com/rockers2004/Semantic_file_system.git
 cd Semantic_file_system
 
 python -m venv myenv
