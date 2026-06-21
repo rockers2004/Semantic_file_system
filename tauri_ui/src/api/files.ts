@@ -7,6 +7,9 @@ export interface TreeEntry {
   is_dir: boolean;
   size: number;
   modified: string;
+  is_protected?: boolean;
+  security_status?: string | null;
+  security_reason?: string | null;
 }
 
 interface TreeResponse {
@@ -80,6 +83,15 @@ export interface CommandResultItem {
   composite_id?: string;
 }
 
+export interface SkippedFileItem {
+  path: string;
+  relative_path?: string;
+  file_name?: string;
+  status: string;
+  reason: string;
+  metadata_indexed?: boolean;
+}
+
 interface CommandResponse {
   ok: boolean;
   data: {
@@ -93,6 +105,8 @@ interface CommandResponse {
     reason?: string | null;
     slpfs_error?: string | null;
     ollama_output?: string | null;
+    stats?: Record<string, unknown> | null;
+    skipped_files?: SkippedFileItem[];
   };
   error?: { code?: string; message?: string; details?: unknown } | null;
   meta?: unknown;

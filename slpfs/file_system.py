@@ -285,7 +285,10 @@ class LocalSLPFS:
             return {
                 "success": True,
                 "stats": stats,
-                "message":  f"Re-indexed {stats['indexed']} files"
+                "message": (
+                    f"Re-indexed {stats['indexed']} files"
+                    f" ({stats.get('metadata_indexed', 0)} metadata-only protected files)"
+                )
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -305,7 +308,10 @@ class LocalSLPFS:
             for file in files:
                 if not file.startswith('.'):
                     total_files += 1
-                    total_size += os.path.getsize(os. path.join(root, file))
+                    try:
+                        total_size += os.path.getsize(os. path.join(root, file))
+                    except OSError:
+                        logger.warning("Unable to read file size during stats: %s", os.path.join(root, file))
         
         return {
             "root_directory": self.root_dir,

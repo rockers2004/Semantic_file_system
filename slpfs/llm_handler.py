@@ -239,11 +239,20 @@ User: "hello how are you"
                         "confidence": 0.0,
                     }
             
+            error_detail = response.text.strip()
+            logger.error(
+                "LLM request failed: status=%s body=%s",
+                response.status_code,
+                error_detail,
+            )
             return {
                 "operation": "error",
                 "parameters": {
-                    "message": "LLM request failed",
-                    "raw_ollama_output": None,
+                    "message": (
+                        f"LLM request failed ({response.status_code})"
+                        f": {error_detail or 'No response body'}"
+                    ),
+                    "raw_ollama_output": error_detail or None,
                 },
                 "confidence": 0.0,
             }

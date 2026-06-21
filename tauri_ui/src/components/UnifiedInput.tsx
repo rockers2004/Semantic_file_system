@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CommandResultItem, runCommand, searchFiles } from "../api/files";
+import { CommandResultItem, SkippedFileItem, runCommand, searchFiles } from "../api/files";
 
 interface UnifiedInputProps {
   setSelectedFile: (path: string) => void;
@@ -170,6 +170,7 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
   const [message, setMessage] = useState("");
   const [inputText, setInputText] = useState("");
   const [results, setResults] = useState<CommandResultItem[]>([]);
+  const [skippedFiles, setSkippedFiles] = useState<SkippedFileItem[]>([]);
 
   const presetConfig = ACTION_PRESETS[preset];
   const canEditMode = presetConfig.route === "auto";
@@ -198,11 +199,13 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
       setMessage("");
       setInputText("");
       setResults([]);
+      setSkippedFiles([]);
       return;
     }
 
     setStatus("loading");
     setError("");
+    setSkippedFiles([]);
 
     try {
       setInputText(composedInput);
@@ -211,6 +214,7 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
         const data = await searchFiles(trimmed, 10, "general");
         setMessage(getSearchMessage(data.total, "SLPFS", data.error));
         setResults(data.results);
+        setSkippedFiles([]);
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
         }
@@ -220,6 +224,7 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
         });
         setMessage(getSearchMessage(data.total, "multimodal", data.error));
         setResults(data.results);
+        setSkippedFiles([]);
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
         }
@@ -227,6 +232,7 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
         const data = await runCommand(composedInput);
         setMessage(data.message);
         setResults(data.results);
+        setSkippedFiles(data.skipped_files ?? []);
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
         }
@@ -234,6 +240,7 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
         const data = await runCommand(trimmed);
         setMessage(data.message);
         setResults(data.results);
+        setSkippedFiles(data.skipped_files ?? []);
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
         }
@@ -241,6 +248,7 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
         const data = await searchFiles(trimmed, 10, mode);
         setMessage(getSearchMessage(data.total, mode, data.error));
         setResults(data.results);
+        setSkippedFiles([]);
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
         }
@@ -252,6 +260,7 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
       setMessage("");
       setInputText("");
       setResults([]);
+      setSkippedFiles([]);
     }
   };
 
@@ -303,6 +312,32 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
                       </div>
                       <div className="unified-result-snippet">{item.snippet || item.path}</div>
                     </button>
+                  ))}
+                </div>
+              )}
+
+              {skippedFiles.length > 0 && (
+                <div className="protected-file-list">
+                  <div className="protected-file-heading">
+                    Protected files found separately
+                  </div>
+                  {skippedFiles.map((item) => (
+                    <div
+                      key={`${item.status}:${item.path}`}
+                      className="protected-file-item"
+                      title={item.path}
+                    >
+                      <div className="result-main-row">
+                        <span className="unified-result-path">
+                          {item.file_name || item.relative_path || item.path}
+                        </span>
+                        <span className="protected-file-status">{item.status}</span>
+                      </div>
+                      <div className="unified-result-snippet">
+                        {item.reason}
+                        {item.metadata_indexed ? " Metadata-only search is available." : ""}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

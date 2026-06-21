@@ -1,8 +1,8 @@
 directories:
-  root_dir: C:\Users\Omsai\Desktop\lsfs_test
+  root_dir: /Users/ssgmcollege/Desktop/lsfs_test_2
   vector_db_dir: ./.lsfs_db
 ollama:
-  model: qwen2.5:3b
+  model: mistral:7b-instruct
   url: http://localhost:11434
 embedding:
   model: all-mpnet-base-v2

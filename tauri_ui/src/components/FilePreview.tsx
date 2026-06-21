@@ -1,18 +1,43 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { readFile } from "../api/files";
+import { readFile, TreeEntry } from "../api/files";
 
 interface FilePreviewProps {
   selectedPath: string;
+  selectedEntry?: TreeEntry | null;
 }
 
-type PreviewKind = "text" | "image" | "video" | "pdf";
+type PreviewKind = "text" | "image" | "video" | "pdf" | "protected";
 
-function getPreviewKind(path: string): PreviewKind {
+const KNOWN_PROTECTED_EXTENSIONS = [
+  ".age",
+  ".asc",
+  ".dmg",
+  ".enc",
+  ".encrypted",
+  ".gpg",
+  ".hc",
+  ".kdbx",
+  ".p12",
+  ".pfx",
+  ".pgp",
+  ".sparsebundle",
+  ".sparseimage",
+  ".tc",
+];
+
+function getPreviewKind(path: string, selectedEntry?: TreeEntry | null): PreviewKind {
+  if (selectedEntry?.is_protected) {
+    return "protected";
+  }
+
   const lower = path.toLowerCase();
   const imageExt = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"];
   const videoExt = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".avi", ".mkv"];
 
+  if (KNOWN_PROTECTED_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
+    return "protected";
+  }
   if (lower.endsWith(".pdf")) {
     return "pdf";
   }
@@ -34,7 +59,7 @@ function getMediaSrc(path: string): string {
   }
 }
 
-export function FilePreview({ selectedPath }: FilePreviewProps) {
+export function FilePreview({ selectedPath, selectedEntry }: FilePreviewProps) {
   const [content, setContent] = useState("");
   const [encoding, setEncoding] = useState("");
   const [size, setSize] = useState<number | null>(null);
@@ -45,7 +70,7 @@ export function FilePreview({ selectedPath }: FilePreviewProps) {
   const [mediaError, setMediaError] = useState("");
   const [openError, setOpenError] = useState("");
 
-  const previewKind = getPreviewKind(selectedPath);
+  const previewKind = getPreviewKind(selectedPath, selectedEntry);
 
   useEffect(() => {
     let isActive = true;
@@ -157,6 +182,21 @@ export function FilePreview({ selectedPath }: FilePreviewProps) {
       {loading && <div className="file-preview-status status-loading" style={{ marginTop: '20px' }}>Loading...</div>}
       
       {error && <div className="file-preview-error error-bubble" style={{ marginTop: '20px', padding: '12px' }}>{error}</div>}
+
+      {!loading && !error && previewKind === "protected" && (
+        <div className="file-preview-protected">
+          <h4>Protected file</h4>
+          <p>
+            {selectedEntry?.security_reason || "This file type is treated as protected, so content preview is skipped."}
+          </p>
+          <p className="file-preview-protected-meta">
+            {selectedEntry?.security_status || "metadata-only"} indexing is available for name and path search.
+          </p>
+          <button className="btn-confirm" type="button" onClick={() => void handleOpenSelectedPath()} style={{ width: 'auto', padding: '10px 24px' }}>
+            Open in Default App
+          </button>
+        </div>
+      )}
 
       {!loading && !error && previewKind === "text" && (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

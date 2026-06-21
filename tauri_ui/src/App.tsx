@@ -4,13 +4,14 @@ import { StartupScreen } from "./components/StartupScreen";
 import { FileTree } from "./components/FileTree";
 import { FilePreview } from "./components/FilePreview";
 import { UnifiedInput } from "./components/UnifiedInput";
-import { getConfig, updateRootPath } from "./api/files";
+import { getConfig, TreeEntry, updateRootPath } from "./api/files";
 import { open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 
 function App() {
   const [backendReady, setBackendReady] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string>("");
+  const [selectedFileEntry, setSelectedFileEntry] = useState<TreeEntry | null>(null);
   const [rootPathInput, setRootPathInput] = useState("");
   const [currentRootPath, setCurrentRootPath] = useState("");
   const [rootError, setRootError] = useState("");
@@ -57,12 +58,18 @@ function App() {
       setCurrentRootPath(data.root_path);
       setRootPathInput(data.root_path);
       setSelectedFile("");
+      setSelectedFileEntry(null);
       setTreeRefreshToken((prev) => prev + 1);
     } catch (err) {
       setRootError(err instanceof Error ? err.message : "Failed to set root path");
     } finally {
       setIsUpdatingRoot(false);
     }
+  };
+
+  const handleFileSelect = (path: string, entry?: TreeEntry) => {
+    setSelectedFile(path);
+    setSelectedFileEntry(entry ?? null);
   };
 
   const handleBrowseRoot = async () => {
@@ -96,7 +103,7 @@ function App() {
           <h2>My Files</h2>
         </div>
         
-        <FileTree onFileSelect={setSelectedFile} refreshToken={treeRefreshToken} selectedFile={selectedFile} />
+        <FileTree onFileSelect={handleFileSelect} refreshToken={treeRefreshToken} selectedFile={selectedFile} />
         
         <div className="root-settings-compact">
           <p className="settings-label">Search Folder</p>
@@ -128,12 +135,12 @@ function App() {
 
         <div className="content-split-area">
           <div className={`search-arena ${isPreviewOpen ? 'with-preview' : ''}`}>
-            <UnifiedInput setSelectedFile={setSelectedFile} />
+            <UnifiedInput setSelectedFile={handleFileSelect} />
           </div>
 
           {isPreviewOpen && (
             <div className="preview-arena">
-              <FilePreview selectedPath={selectedFile} />
+              <FilePreview selectedPath={selectedFile} selectedEntry={selectedFileEntry} />
             </div>
           )}
         </div>

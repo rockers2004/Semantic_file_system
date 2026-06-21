@@ -38,6 +38,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator, Field
 
+from backend_api.app.logging_config import configure_logging
+
+configure_logging()
+
 from backend_api.app.backend_facade import get_backend_facade
 
 app = FastAPI(title="Semantic File System API", version="0.1.0")
@@ -470,6 +474,12 @@ async def run_command(request: Request, payload: CommandRequest):
             "slpfs_success": success,
             "slpfs_error": error_message or None,
             "ollama_output": result.get("ollama_output"),
+            "stats": result.get("stats") if isinstance(result.get("stats"), dict) else None,
+            "skipped_files": (
+                result.get("stats", {}).get("skipped_files", [])
+                if isinstance(result.get("stats"), dict)
+                else []
+            ),
         },
         meta=Meta(request_id=request.state.request_id),
     )

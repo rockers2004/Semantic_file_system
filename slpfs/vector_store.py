@@ -17,6 +17,7 @@ Responsibilities:
 import hashlib
 import os
 import re
+import zipfile
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import mimetypes
@@ -37,6 +38,26 @@ logger = logging.getLogger(__name__)
 INDEX_SCHEMA_VERSION = 3
 MAX_EMBED_CHARS = 50000
 LARGE_PDF_MAX_PAGES = 40
+MAX_SKIPPED_FILE_DETAILS = 200
+KNOWN_ENCRYPTED_EXTENSIONS = {
+    ".age",
+    ".asc",
+    ".enc",
+    ".encrypted",
+    ".gpg",
+    ".hc",
+    ".kdbx",
+    ".pgp",
+    ".pfx",
+    ".p12",
+    ".tc",
+}
+PROTECTED_CONTAINER_EXTENSIONS = {
+    ".dmg",
+    ".sparsebundle",
+    ".sparseimage",
+}
+ARCHIVE_EXTENSIONS = {".zip"}
 CODE_EXTENSIONS = {
     ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".c", ".cc", ".cpp", ".h", ".hpp",
     ".cs", ".go", ".rs", ".php", ".rb", ".swift", ".kt", ".kts", ".scala", ".sh",
@@ -85,6 +106,161 @@ class VectorStore:
     def _generate_file_id(self, file_path: str) -> str:
         """Generate unique ID for file"""
         return hashlib.md5(file_path.encode()).hexdigest()
+
+    def _relative_path(self, file_path: str, root_dir: str) -> str:
+        try:
+            return os.path.relpath(file_path, root_dir)
+        except ValueError:
+            return os.path.basename(file_path)
+
+    def _file_metadata(
+        self,
+        file_path: str,
+        root_dir: str,
+        *,
+        current_size: Optional[int] = None,
+        current_mtime: Optional[float] = None,
+        content_indexed: bool = True,
+        security_status: str = "readable",
+        skip_reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        relative_path = self._relative_path(file_path, root_dir)
+        return {
+            "file_path": file_path,
+            "relative_path": relative_path,
+            "file_name": os.path.basename(file_path),
+            "file_type": mimetypes.guess_type(file_path)[0] or "unknown",
+            "indexed_at": datetime.now().isoformat(),
+            "index_schema_version": INDEX_SCHEMA_VERSION,
+            "size_bytes": current_size if current_size is not None else 0,
+            "modified_ts": current_mtime if current_mtime is not None else 0.0,
+            "content_indexed": content_indexed,
+            "security_status": security_status,
+            "skip_reason": skip_reason or "",
+        }
+
+    def _skip_record(
+        self,
+        file_path: str,
+        root_dir: str,
+        *,
+        status: str,
+        reason: str,
+        metadata_indexed: bool,
+    ) -> Dict[str, Any]:
+        return {
+            "path": file_path,
+            "relative_path": self._relative_path(file_path, root_dir),
+            "file_name": os.path.basename(file_path),
+            "status": status,
+            "reason": reason,
+            "metadata_indexed": metadata_indexed,
+        }
+
+    def _is_zip_encrypted(self, file_path: str) -> Optional[bool]:
+        try:
+            with zipfile.ZipFile(file_path) as archive:
+                return any(info.flag_bits & 0x1 for info in archive.infolist())
+        except zipfile.BadZipFile:
+            return None
+        except OSError:
+            raise
+        except Exception:
+            logger.exception("Unable to inspect zip encryption status: %s", file_path)
+            return None
+
+    def _classify_known_protected_file(self, file_path: str) -> Optional[tuple[str, str]]:
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext in KNOWN_ENCRYPTED_EXTENSIONS:
+            return "encrypted_known_extension", f"Known encrypted/sensitive extension: {ext}"
+        if ext in PROTECTED_CONTAINER_EXTENSIONS:
+            return "possibly_encrypted_container", f"Protected disk image/container extension: {ext}"
+        if ext == ".pdf" and PdfReader is not None:
+            try:
+                reader = PdfReader(file_path)
+                if reader.is_encrypted:
+                    return "password_required", "Encrypted PDF requires a password"
+            except PermissionError:
+                raise
+            except Exception:
+                logger.debug("Unable to inspect PDF encryption status: %s", file_path, exc_info=True)
+        if ext in ARCHIVE_EXTENSIONS:
+            encrypted = self._is_zip_encrypted(file_path)
+            if encrypted:
+                return "password_required", "Encrypted zip archive requires a password"
+        return None
+
+    def _index_metadata_only(
+        self,
+        file_path: str,
+        root_dir: str,
+        *,
+        security_status: str,
+        reason: str,
+        current_size: Optional[int] = None,
+        current_mtime: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Index filename/path metadata for protected files without reading content."""
+        try:
+            if current_size is None:
+                try:
+                    current_size = os.path.getsize(file_path)
+                except OSError:
+                    current_size = 0
+            if current_mtime is None:
+                try:
+                    current_mtime = os.path.getmtime(file_path)
+                except OSError:
+                    current_mtime = 0.0
+
+            metadata = self._file_metadata(
+                file_path,
+                root_dir,
+                current_size=current_size,
+                current_mtime=current_mtime,
+                content_indexed=False,
+                security_status=security_status,
+                skip_reason=reason,
+            )
+            document = (
+                f"Protected file metadata only. "
+                f"Name: {metadata['file_name']}. Path: {metadata['relative_path']}. "
+                f"Status: {security_status}. Reason: {reason}."
+            )
+            embedding = self.embedding_model.encode(document).tolist()
+            self.collection.upsert(
+                ids=[self._generate_file_id(file_path)],
+                embeddings=[embedding],
+                documents=[document],
+                metadatas=[metadata],
+            )
+            logger.warning(
+                "Skipped content indexing for protected file; metadata indexed: %s | %s",
+                file_path,
+                reason,
+            )
+            return {
+                "status": "metadata_indexed",
+                "skip": self._skip_record(
+                    file_path,
+                    root_dir,
+                    status=security_status,
+                    reason=reason,
+                    metadata_indexed=True,
+                ),
+            }
+        except Exception as exc:
+            logger.exception("Failed to index protected file metadata: %s", file_path)
+            return {
+                "status": "error",
+                "skip": self._skip_record(
+                    file_path,
+                    root_dir,
+                    status=security_status,
+                    reason=f"{reason}; metadata indexing failed: {exc}",
+                    metadata_indexed=False,
+                ),
+            }
     
     def _read_pdf_content(self, file_path: str, max_pages: Optional[int] = None) -> Optional[str]:
         """Extract text content from PDF files."""
@@ -217,12 +393,32 @@ class VectorStore:
 
         return score
     
-    def index_file(self, file_path: str, root_dir: str) -> str:
-        """Index a single file. Returns 'indexed', 'unchanged', or 'error'."""
+    def index_file_result(self, file_path: str, root_dir: str) -> Dict[str, Any]:
+        """Index one file and return detailed status for reporting."""
         try:
             file_id = self._generate_file_id(file_path)
-            current_size = os.path.getsize(file_path)
-            current_mtime = os.path.getmtime(file_path)
+            try:
+                current_size = os.path.getsize(file_path)
+                current_mtime = os.path.getmtime(file_path)
+            except PermissionError as exc:
+                return self._index_metadata_only(
+                    file_path,
+                    root_dir,
+                    security_status="locked_permission_denied",
+                    reason=str(exc),
+                )
+
+            protected = self._classify_known_protected_file(file_path)
+            if protected:
+                status, reason = protected
+                return self._index_metadata_only(
+                    file_path,
+                    root_dir,
+                    security_status=status,
+                    reason=reason,
+                    current_size=current_size,
+                    current_mtime=current_mtime,
+                )
 
             # Check if already indexed and unchanged
             try:
@@ -237,7 +433,7 @@ class VectorStore:
                         and stored_size == current_size
                         and abs(stored_mtime - current_mtime) < 1e-6
                     ):
-                        return "unchanged"
+                        return {"status": "unchanged"}
             except Exception:
                 # If lookup fails, fall through to reindex
                 pass
@@ -245,24 +441,27 @@ class VectorStore:
             # Read content
             content = self._read_file_content(file_path)
             if not content or content.startswith("[Error"):
-                return "error"
+                reason = content or "No content could be read"
+                return self._index_metadata_only(
+                    file_path,
+                    root_dir,
+                    security_status="unreadable",
+                    reason=reason,
+                    current_size=current_size,
+                    current_mtime=current_mtime,
+                )
             
             # Generate embedding
             embed_content = content if len(content) <= MAX_EMBED_CHARS else content[:MAX_EMBED_CHARS]
             embedding = self.embedding_model.encode(embed_content).tolist()
             
             # Prepare metadata
-            relative_path = os.path.relpath(file_path, root_dir)
-            metadata = {
-                "file_path": file_path,
-                "relative_path": relative_path,
-                "file_name": os.path.basename(file_path),
-                "file_type": mimetypes.guess_type(file_path)[0] or "unknown",
-                "indexed_at": datetime.now().isoformat(),
-                "index_schema_version": INDEX_SCHEMA_VERSION,
-                "size_bytes": current_size,
-                "modified_ts": current_mtime,
-            }
+            metadata = self._file_metadata(
+                file_path,
+                root_dir,
+                current_size=current_size,
+                current_mtime=current_mtime,
+            )
             
             # Add to ChromaDB
             self.collection.upsert(
@@ -272,19 +471,55 @@ class VectorStore:
                 metadatas=[metadata]
             )
             
-            return "indexed"
+            return {"status": "indexed"}
         
         except Exception as e: 
             logger.exception("Error indexing %s: %s", file_path, e)
-            return "error"
+            return {
+                "status": "error",
+                "skip": self._skip_record(
+                    file_path,
+                    root_dir,
+                    status="index_error",
+                    reason=str(e),
+                    metadata_indexed=False,
+                ),
+            }
+
+    def index_file(self, file_path: str, root_dir: str) -> str:
+        """Index a single file. Returns a compact status string."""
+        return str(self.index_file_result(file_path, root_dir).get("status", "error"))
     
-    def index_directory(self, directory:  str) -> Dict[str, int]:
+    def index_directory(self, directory:  str) -> Dict[str, Any]:
         """Index all files in directory (skip unchanged)."""
-        stats = {"indexed": 0, "unchanged": 0, "errors": 0}
+        stats: Dict[str, Any] = {
+            "indexed": 0,
+            "unchanged": 0,
+            "metadata_indexed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "skipped_files": [],
+        }
         
         logger.info("Indexing directory: %s", directory)
+
+        def _record_walk_error(error: OSError) -> None:
+            path = getattr(error, "filename", "") or str(error)
+            logger.warning("Skipped unreadable directory while indexing: %s | %s", path, error)
+            stats["skipped"] += 1
+            if len(stats["skipped_files"]) < MAX_SKIPPED_FILE_DETAILS:
+                stats["skipped_files"].append(
+                    {
+                        "path": path,
+                        "relative_path": self._relative_path(path, directory),
+                        "file_name": os.path.basename(path),
+                        "status": "locked_directory",
+                        "reason": str(error),
+                        "metadata_indexed": False,
+                    }
+                )
         
-        for root, dirs, files in os.walk(directory):
+        for root, dirs, files in os.walk(directory, onerror=_record_walk_error):
             # Skip hidden directories and vector DB
             dirs[:] = [d for d in dirs if not d.startswith('.')]
             
@@ -293,19 +528,29 @@ class VectorStore:
                     continue
                 
                 file_path = os.path.join(root, file)
-                status = self.index_file(file_path, directory)
+                result = self.index_file_result(file_path, directory)
+                status = result.get("status")
                 if status == "indexed":
                     stats["indexed"] += 1
                     logger.debug("Indexed file: %s", os.path.relpath(file_path, directory))
                 elif status == "unchanged":
                     stats["unchanged"] += 1
+                elif status == "metadata_indexed":
+                    stats["metadata_indexed"] += 1
+                    stats["skipped"] += 1
                 else:
                     stats["errors"] += 1
+
+                skip = result.get("skip")
+                if isinstance(skip, dict) and len(stats["skipped_files"]) < MAX_SKIPPED_FILE_DETAILS:
+                    stats["skipped_files"].append(skip)
         
         logger.info(
-            "Indexed: %s | Unchanged: %s | Errors: %s",
+            "Indexed: %s | Unchanged: %s | Metadata-only: %s | Skipped: %s | Errors: %s",
             stats["indexed"],
             stats["unchanged"],
+            stats["metadata_indexed"],
+            stats["skipped"],
             stats["errors"],
         )
         return stats

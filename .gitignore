@@ -16,6 +16,8 @@ myenv/
 
 # Chroma / vector store cache
 .lsfs_db/
+logs/
+*.log
 
 # IDE
 .vscode/

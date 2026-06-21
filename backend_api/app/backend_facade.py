@@ -14,6 +14,7 @@ from typing import Any, Optional
 from backend_api.app.runtime_manager import get_backend_health_snapshot, initialize_backends, shutdown_backends
 from backend_api.app.semantixel_runtime import get_semantixel_config, get_semantixel_runtime
 from backend_api.app.slpfs_runtime import get_root_path, get_runtime, set_root_path
+from slpfs.file_security import classify_protected_file
 
 
 class BackendFacade:
@@ -53,6 +54,7 @@ class BackendFacade:
         for entry in target.iterdir():
             try:
                 stat = entry.stat()
+                protected = None if entry.is_dir() else classify_protected_file(entry)
                 entries.append(
                     {
                         "name": entry.name,
@@ -60,6 +62,9 @@ class BackendFacade:
                         "is_dir": entry.is_dir(),
                         "size": stat.st_size,
                         "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        "is_protected": protected is not None,
+                        "security_status": protected.get("status") if protected else None,
+                        "security_reason": protected.get("reason") if protected else None,
                     }
                 )
             except OSError:
@@ -84,6 +89,10 @@ class BackendFacade:
             raise FileNotFoundError("File not found")
         if not target.is_file():
             raise IsADirectoryError("Path is a directory, not a file")
+
+        protected = classify_protected_file(target)
+        if protected:
+            raise ValueError(protected["reason"])
 
         stat = target.stat()
 
@@ -129,8 +138,12 @@ class BackendFacade:
             "message": result.get("message", "Text indexing completed"),
             "source": "slpfs",
             "indexed": stats.get("indexed"),
-            "failed": stats.get("failed"),
+            "unchanged": stats.get("unchanged"),
+            "metadata_indexed": stats.get("metadata_indexed"),
+            "failed": stats.get("failed", stats.get("errors")),
             "skipped": stats.get("skipped"),
+            "skipped_files": stats.get("skipped_files", []),
+            "errors": stats.get("errors"),
         }
 
     def trigger_indexing(self, target: str) -> dict[str, Any]:

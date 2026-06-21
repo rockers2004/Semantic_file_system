@@ -300,6 +300,33 @@ body, html {
   overflow: hidden;
 }
 
+.protected-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.protected-file-heading {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8a5a00;
+  text-transform: uppercase;
+}
+
+.protected-file-item {
+  background: #fff8e6;
+  border: 1px solid #ead08a;
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.protected-file-status {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #8a5a00;
+}
+
 .input-bar-container {
   display: flex;
   gap: 12px;
@@ -432,6 +459,30 @@ body, html {
   margin-top: 60px;
 }
 
+.file-preview-protected {
+  margin-top: 32px;
+  padding: 16px;
+  background: #fff8e6;
+  border: 1px solid #ead08a;
+  border-radius: var(--radius-sm);
+  color: #6f4b00;
+}
+
+.file-preview-protected h4 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.file-preview-protected p {
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.file-preview-protected-meta {
+  font-size: 13px;
+  color: #8a5a00;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -545,6 +596,7 @@ body, html {
 .neo-ext-image { color: #a074c4; }
 .neo-ext-text { color: #858585; }
 .neo-ext-generic { color: #858585; }
+.neo-ext-protected { color: #d6a72c; }
 
 .neo-name {
   font-size: 13px;
@@ -560,6 +612,21 @@ body, html {
 
 .neo-file-name {
   color: #a0a0a0;
+}
+
+.neo-tree-item.neo-protected .neo-file-name {
+  color: #d7bb72;
+}
+
+.neo-protected-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(214, 167, 44, 0.15);
+  color: #d6a72c;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .neo-selected .neo-file-name,

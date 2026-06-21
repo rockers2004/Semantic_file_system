@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { fetchTree, TreeEntry } from "../api/files";
 
 interface FileTreeProps {
-  onFileSelect: (path: string) => void;
+  onFileSelect: (path: string, entry?: TreeEntry) => void;
   refreshToken?: number;
   selectedFile?: string;
 }
 
-function getFileIcon(name: string, is_dir: boolean, isOpen: boolean) {
+function getFileIcon(name: string, is_dir: boolean, isOpen: boolean, isProtected = false) {
   if (is_dir) {
     return isOpen ? (
       <svg className="neo-icon neo-folder-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M2.25 18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.75a2.25 2.25 0 0 0-2.25-2.25h-5.38l-1.72-2.58A2.25 2.25 0 0 0 10.53 4.5H4.5A2.25 2.25 0 0 0 2.25 6.75v11.25z"/></svg>
@@ -17,6 +17,10 @@ function getFileIcon(name: string, is_dir: boolean, isOpen: boolean) {
   }
 
   const ext = name.split('.').pop()?.toLowerCase();
+
+  if (isProtected) {
+    return <svg className="neo-icon neo-file-icon neo-ext-protected" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
+  }
   
   if (ext === 'js' || ext === 'jsx' || ext === 'ts' || ext === 'tsx' || ext === 'py' || ext === 'json' || ext === 'rs') {
     return <svg className={`neo-icon neo-file-icon neo-ext-code`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>;
@@ -39,30 +43,30 @@ export function FileTree({ onFileSelect, refreshToken = 0, selectedFile }: FileT
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string>("");
 
+  const loadRoot = async () => {
+    setError("");
+    setRootPath("");
+    setExpanded({});
+    setChildrenByPath({});
+    setLoading({});
+    setRootEntries([]);
+
+    try {
+      const data = await fetchTree();
+      setRootPath(data.path);
+      setRootEntries(data.entries);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load file tree");
+    }
+  };
+
   useEffect(() => {
-    const loadRoot = async () => {
-      setError("");
-      setRootPath("");
-      setExpanded({});
-      setChildrenByPath({});
-      setLoading({});
-      setRootEntries([]);
-
-      try {
-        const data = await fetchTree();
-        setRootPath(data.path);
-        setRootEntries(data.entries);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load file tree");
-      }
-    };
-
-    loadRoot();
+    void loadRoot();
   }, [refreshToken]);
 
   const toggleDirectory = async (entry: TreeEntry) => {
     if (!entry.is_dir) {
-      onFileSelect(entry.path);
+      onFileSelect(entry.path, entry);
       return;
     }
 
@@ -95,10 +99,11 @@ export function FileTree({ onFileSelect, refreshToken = 0, selectedFile }: FileT
           return (
             <div key={entry.path} className="neo-item-wrapper">
               <button
-                className={`neo-tree-item ${entry.is_dir ? 'neo-dir' : 'neo-file'} ${isExactSelected ? 'neo-selected' : ''}`}
+                className={`neo-tree-item ${entry.is_dir ? 'neo-dir' : 'neo-file'} ${entry.is_protected ? 'neo-protected' : ''} ${isExactSelected ? 'neo-selected' : ''}`}
                 style={{ paddingLeft: `${level * 16 + 8}px` }}
                 onClick={() => void toggleDirectory(entry)}
                 type="button"
+                title={entry.security_reason || entry.path}
               >
                 <div className="neo-item-content">
                   {entry.is_dir ? (
@@ -106,8 +111,9 @@ export function FileTree({ onFileSelect, refreshToken = 0, selectedFile }: FileT
                   ) : (
                     <span className="neo-chevron-spacer" />
                   )}
-                  {getFileIcon(entry.name, entry.is_dir, isOpen)}
+                  {getFileIcon(entry.name, entry.is_dir, isOpen, !!entry.is_protected)}
                   <span className={`neo-name ${entry.is_dir ? 'neo-dir-name' : 'neo-file-name'}`}>{entry.name}</span>
+                  {entry.is_protected && <span className="neo-protected-badge">Protected</span>}
                 </div>
               </button>
 
@@ -131,7 +137,14 @@ export function FileTree({ onFileSelect, refreshToken = 0, selectedFile }: FileT
       <div className="neo-tree-header">
         <h3>Explorer</h3>
       </div>
-      {error && <p className="file-tree-error">{error}</p>}
+      {error && (
+        <div className="file-tree-error">
+          <p>{error}</p>
+          <button type="button" className="btn-confirm" onClick={() => void loadRoot()}>
+            Retry
+          </button>
+        </div>
+      )}
       <div className="neo-file-tree-list">
         {rootEntries.length > 0 ? renderEntries(rootEntries) : (
            <div className="neo-tree-empty-state">
