@@ -10,6 +10,9 @@ export interface TreeEntry {
   is_protected?: boolean;
   security_status?: string | null;
   security_reason?: string | null;
+  category?: string | null;
+  category_confidence?: number | null;
+  category_reason?: string | null;
 }
 
 interface TreeResponse {
@@ -132,12 +135,15 @@ export async function readFile(path: string): Promise<FileReadResponse["data"]> 
   return json.data;
 }
 
-export async function fetchTree(path?: string): Promise<TreeResponse["data"]> {
+export async function fetchTree(path?: string, semantic = false): Promise<TreeResponse["data"]> {
   const params = new URLSearchParams();
   if (path) {
     params.set("path", path);
   }
   params.set("depth", "1");
+  if (semantic) {
+    params.set("semantic", "true");
+  }
 
   const response = await fetch(`${BACKEND_URL}/api/v1/tree?${params.toString()}`, {
     method: "GET",

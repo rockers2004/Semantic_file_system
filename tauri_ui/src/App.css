@@ -398,6 +398,45 @@ body, html {
   font-size: 12px;
 }
 
+/* Category badge shown next to file names when semantic categories are enabled */
+.neo-category-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.06);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+}
+.neo-category-badge[title] {
+  cursor: help;
+}
+
+/* Category color variants */
+.neo-category-study { background: rgba(34,139,34,0.15); color: #2e7d32; }
+.neo-category-documents { background: rgba(33,150,243,0.10); color: #1565c0; }
+.neo-category-code { background: rgba(33,33,33,0.06); color: #37474f; }
+.neo-category-images { background: rgba(156,39,176,0.08); color: #6a1b9a; }
+.neo-category-protected { background: rgba(211,47,47,0.12); color: #b71c1c; }
+.neo-category-personal { background: rgba(255,152,0,0.12); color: #ef6c00; }
+.neo-category-college { background: rgba(3,155,229,0.12); color: #0277bd; }
+.neo-category-medical { background: rgba(233,30,99,0.08); color: #c2185b; }
+.neo-category-finance { background: rgba(0,150,136,0.08); color: #00796b; }
+.neo-category-other { background: rgba(158,158,158,0.06); color: #424242; }
+
+/* Group headers in file tree */
+.neo-group {
+  margin-bottom: 8px;
+}
+.neo-group-header {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
 .routing-hint {
   color: var(--text-dim);
 }

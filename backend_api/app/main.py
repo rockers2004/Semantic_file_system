@@ -277,7 +277,7 @@ async def update_config_root(request: Request, payload: ConfigUpdateRequest):
     return _update_root_config_response(request, payload)
 
 @app.get("/api/v1/tree")
-async def get_tree(request: Request, path: Optional[str] = None, depth: int = 1):
+async def get_tree(request: Request, path: Optional[str] = None, depth: int = 1, semantic: bool = False):
     """
     List directory entries for file tree rendering.
 
@@ -286,7 +286,7 @@ async def get_tree(request: Request, path: Optional[str] = None, depth: int = 1)
     - depth: currently accepted for compatibility, used as 1-level listing
     """
     try:
-        data = backend_facade.list_tree(path=path, depth=depth)
+        data = backend_facade.list_tree(path=path, depth=depth, semantic=bool(semantic))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:

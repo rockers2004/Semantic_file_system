@@ -31,6 +31,8 @@ try:
 except ImportError:
     PdfReader = None
 
+from slpfs.file_categories import categorize_file
+
     
 logger = logging.getLogger(__name__)
 
@@ -222,6 +224,19 @@ class VectorStore:
                 security_status=security_status,
                 skip_reason=reason,
             )
+            # Add automatic virtual category metadata for metadata-only indexed files
+            try:
+                is_protected = security_status != "readable"
+                cat = categorize_file(file_path, is_protected=is_protected, content_sample=None)
+                metadata.update(
+                    {
+                        "category": cat.get("category"),
+                        "category_confidence": float(cat.get("category_confidence", 0.0)),
+                        "category_reason": cat.get("category_reason"),
+                    }
+                )
+            except Exception:
+                logger.debug("Failed to compute category for metadata-only file: %s", file_path, exc_info=True)
             document = (
                 f"Protected file metadata only. "
                 f"Name: {metadata['file_name']}. Path: {metadata['relative_path']}. "
@@ -462,6 +477,21 @@ class VectorStore:
                 current_size=current_size,
                 current_mtime=current_mtime,
             )
+            # Compute and attach virtual category info using filename/path and a small content sample
+            try:
+                content_sample = None
+                if isinstance(content, str) and content:
+                    content_sample = content[:2000]
+                cat = categorize_file(file_path, is_protected=False, content_sample=content_sample)
+                metadata.update(
+                    {
+                        "category": cat.get("category"),
+                        "category_confidence": float(cat.get("category_confidence", 0.0)),
+                        "category_reason": cat.get("category_reason"),
+                    }
+                )
+            except Exception:
+                logger.debug("Failed to compute category for file: %s", file_path, exc_info=True)
             
             # Add to ChromaDB
             self.collection.upsert(
@@ -588,14 +618,24 @@ class VectorStore:
                         metadata,
                         results['documents'][0][i],
                     )
-                    formatted_results.append({
-                        "file_path": metadata['file_path'],
-                        "file_name": metadata['file_name'],
-                        "relative_path": metadata['relative_path'],
+                    # Pull category fields if present in metadata
+                    formatted = {
+                        "file_path": metadata.get('file_path'),
+                        "file_name": metadata.get('file_name'),
+                        "relative_path": metadata.get('relative_path'),
                         "preview": preview,
                         "score": semantic_score + lexical_score,
                         "semantic_score": semantic_score,
-                    })
+                    }
+                    if metadata.get('category'):
+                        formatted.update(
+                            {
+                                "category": metadata.get('category'),
+                                "category_confidence": float(metadata.get('category_confidence', 0.0) or 0.0),
+                                "category_reason": metadata.get('category_reason'),
+                            }
+                        )
+                    formatted_results.append(formatted)
             
             formatted_results.sort(key=lambda item: item["score"], reverse=True)
             return formatted_results[:k]

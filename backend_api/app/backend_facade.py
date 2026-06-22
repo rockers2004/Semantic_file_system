@@ -15,6 +15,7 @@ from backend_api.app.runtime_manager import get_backend_health_snapshot, initial
 from backend_api.app.semantixel_runtime import get_semantixel_config, get_semantixel_runtime
 from backend_api.app.slpfs_runtime import get_root_path, get_runtime, set_root_path
 from slpfs.file_security import classify_protected_file
+from slpfs.file_categories import categorize_file
 
 
 class BackendFacade:
@@ -42,7 +43,7 @@ class BackendFacade:
     def update_root_path(self, new_root: str) -> str:
         return set_root_path(new_root)
 
-    def list_tree(self, path: Optional[str], depth: int) -> dict[str, Any]:
+    def list_tree(self, path: Optional[str], depth: int, semantic: bool = False) -> dict[str, Any]:
         target = self._resolve_safe_path(path)
 
         if not target.exists():
@@ -55,6 +56,22 @@ class BackendFacade:
             try:
                 stat = entry.stat()
                 protected = None if entry.is_dir() else classify_protected_file(entry)
+
+                # Decide whether to compute semantic category using a small content sample
+                cat = {"category": None, "category_confidence": 0.0, "category_reason": None}
+                if semantic and not entry.is_dir() and not protected:
+                    try:
+                        # Read a small content sample safely
+                        sample = None
+                        try:
+                            with open(entry, 'r', encoding='utf-8', errors='ignore') as fh:
+                                sample = fh.read(4096)
+                        except OSError:
+                            sample = None
+                        cat = categorize_file(entry, is_protected=False, content_sample=sample)
+                    except Exception:
+                        cat = {"category": None, "category_confidence": 0.0, "category_reason": None}
+
                 entries.append(
                     {
                         "name": entry.name,
@@ -65,6 +82,9 @@ class BackendFacade:
                         "is_protected": protected is not None,
                         "security_status": protected.get("status") if protected else None,
                         "security_reason": protected.get("reason") if protected else None,
+                        "category": cat.get("category"),
+                        "category_confidence": float(cat.get("category_confidence", 0.0) or 0.0),
+                        "category_reason": cat.get("category_reason"),
                     }
                 )
             except OSError:
@@ -256,6 +276,9 @@ class BackendFacade:
                     "is_dir": False,
                     "source": "slpfs",
                     "kind": "text",
+                    "category": item.get("category"),
+                    "category_confidence": float(item.get("category_confidence", 0.0) or 0.0),
+                    "category_reason": item.get("category_reason"),
                 }
             )
 

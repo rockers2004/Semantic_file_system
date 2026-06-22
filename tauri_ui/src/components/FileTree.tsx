@@ -38,12 +38,13 @@ function getFileIcon(name: string, is_dir: boolean, isOpen: boolean, isProtected
 export function FileTree({ onFileSelect, refreshToken = 0, selectedFile }: FileTreeProps) {
   const [rootPath, setRootPath] = useState<string>("");
   const [rootEntries, setRootEntries] = useState<TreeEntry[]>([]);
+  const [useSemantic, setUseSemantic] = useState<boolean>(false);
   const [childrenByPath, setChildrenByPath] = useState<Record<string, TreeEntry[]>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string>("");
 
-  const loadRoot = async () => {
+  const loadRoot = async (semanticOverride?: boolean) => {
     setError("");
     setRootPath("");
     setExpanded({});
@@ -52,7 +53,7 @@ export function FileTree({ onFileSelect, refreshToken = 0, selectedFile }: FileT
     setRootEntries([]);
 
     try {
-      const data = await fetchTree();
+      const data = await fetchTree(undefined, typeof semanticOverride === 'boolean' ? semanticOverride : useSemantic);
       setRootPath(data.path);
       setRootEntries(data.entries);
     } catch (err) {
@@ -62,7 +63,7 @@ export function FileTree({ onFileSelect, refreshToken = 0, selectedFile }: FileT
 
   useEffect(() => {
     void loadRoot();
-  }, [refreshToken]);
+  }, [refreshToken, useSemantic]);
 
   const toggleDirectory = async (entry: TreeEntry) => {
     if (!entry.is_dir) {
@@ -76,7 +77,7 @@ export function FileTree({ onFileSelect, refreshToken = 0, selectedFile }: FileT
     if (!isExpanded && !childrenByPath[entry.path]) {
       setLoading((prev) => ({ ...prev, [entry.path]: true }));
       try {
-        const data = await fetchTree(entry.path);
+        const data = await fetchTree(entry.path, useSemantic);
         setChildrenByPath((prev) => ({ ...prev, [entry.path]: data.entries }));
       } catch (err) {
         // Soft error for tree expansion
@@ -88,46 +89,89 @@ export function FileTree({ onFileSelect, refreshToken = 0, selectedFile }: FileT
   };
 
   const renderEntries = (entries: TreeEntry[], level = 0) => {
+    // Group entries by selected category kind
+    const groupKey = (entry: TreeEntry) => {
+      // If semantic mode, prefer backend-provided category
+      if (useSemantic && entry.category) return entry.category;
+      // Otherwise default grouping by extension/type
+      const name = entry.name || '';
+      const ext = name.includes('.') ? name.substring(name.lastIndexOf('.')).toLowerCase() : '';
+      if (entry.is_protected) return 'Protected';
+      if (['.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.c', '.cpp', '.h', '.cs', '.go', '.rs', '.php', '.rb', '.swift', '.kt', '.scala', '.sh', '.ps1', '.sql'].includes(ext)) return 'Code';
+      if (['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.heic'].includes(ext)) return 'Images';
+      if (['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v', '.ogg'].includes(ext)) return 'Videos';
+      if (['.mp3', '.wav', '.aac', '.flac', '.m4a', '.ogg'].includes(ext)) return 'Audio';
+      if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext)) return 'Archives';
+      if (['.csv', '.tsv', '.json', '.xml', '.db', '.sqlite', '.sqlite3', '.parquet'].includes(ext)) return 'Data';
+      if (['.ppt', '.pptx', '.key', '.odp'].includes(ext)) return 'Presentations';
+      if (['.xls', '.xlsx', '.ods'].includes(ext)) return 'Spreadsheets';
+      if (['.pdf', '.doc', '.docx', '.txt', '.md', '.rtf', '.odt', '.pages'].includes(ext)) return 'Documents';
+      return 'Other';
+    };
+
+    const grouped: Record<string, TreeEntry[]> = {};
+    for (const e of entries) {
+      const k = groupKey(e) || 'Other';
+      if (!grouped[k]) grouped[k] = [];
+      grouped[k].push(e);
+    }
+
+    const sortedGroups = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+
     return (
       <div className="neo-tree-level">
-        {entries.map((entry) => {
-          const isOpen = !!expanded[entry.path];
-          const children = childrenByPath[entry.path] || [];
-          const isLoading = !!loading[entry.path];
-          const isExactSelected = selectedFile === entry.path;
+        {sortedGroups.map((grp) => (
+          <div key={grp} className="neo-group">
+            <div className="neo-group-header">{grp} ({grouped[grp].length})</div>
+            {grouped[grp].map((entry) => {
+              const isOpen = !!expanded[entry.path];
+              const children = childrenByPath[entry.path] || [];
+              const isLoading = !!loading[entry.path];
+              const isExactSelected = selectedFile === entry.path;
 
-          return (
-            <div key={entry.path} className="neo-item-wrapper">
-              <button
-                className={`neo-tree-item ${entry.is_dir ? 'neo-dir' : 'neo-file'} ${entry.is_protected ? 'neo-protected' : ''} ${isExactSelected ? 'neo-selected' : ''}`}
-                style={{ paddingLeft: `${level * 16 + 8}px` }}
-                onClick={() => void toggleDirectory(entry)}
-                type="button"
-                title={entry.security_reason || entry.path}
-              >
-                <div className="neo-item-content">
-                  {entry.is_dir ? (
-                    <svg className={`neo-chevron ${isOpen ? 'neo-chevron-open' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                  ) : (
-                    <span className="neo-chevron-spacer" />
-                  )}
-                  {getFileIcon(entry.name, entry.is_dir, isOpen, !!entry.is_protected)}
-                  <span className={`neo-name ${entry.is_dir ? 'neo-dir-name' : 'neo-file-name'}`}>{entry.name}</span>
-                  {entry.is_protected && <span className="neo-protected-badge">Protected</span>}
-                </div>
-              </button>
+              return (
+                <div key={entry.path} className="neo-item-wrapper">
+                  <button
+                    className={`neo-tree-item ${entry.is_dir ? 'neo-dir' : 'neo-file'} ${entry.is_protected ? 'neo-protected' : ''} ${isExactSelected ? 'neo-selected' : ''}`}
+                    style={{ paddingLeft: `${(entry.is_dir ? 0 : 8) + 8}px` }}
+                    onClick={() => void toggleDirectory(entry)}
+                    type="button"
+                    title={entry.security_reason || entry.path}
+                  >
+                    <div className="neo-item-content">
+                      {entry.is_dir ? (
+                        <svg className={`neo-chevron ${isOpen ? 'neo-chevron-open' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                      ) : (
+                        <span className="neo-chevron-spacer" />
+                      )}
+                      {getFileIcon(entry.name, entry.is_dir, isOpen, !!entry.is_protected)}
+                      <span className={`neo-name ${entry.is_dir ? 'neo-dir-name' : 'neo-file-name'}`}>{entry.name}</span>
+                      {entry.is_protected && <span className="neo-protected-badge">Protected</span>}
+                      {entry.category && !entry.is_dir && useSemantic && (
+                        (() => {
+                          const safeCat = (entry.category || '').toString().replace(/\s+/g, '-').toLowerCase();
+                          const className = `neo-category-badge ${safeCat ? `neo-category-${safeCat}` : ''}`;
+                          return (
+                            <span className={className} title={entry.category_reason ?? ''} data-cat={entry.category}>{entry.category}</span>
+                          );
+                        })()
+                      )}
+                    </div>
+                  </button>
 
-              <div className={`neo-children-container ${isOpen ? 'neo-open' : 'neo-closed'}`}>
-                {entry.is_dir && isOpen && isLoading && (
-                  <div className="neo-tree-loading" style={{ paddingLeft: `${(level + 1) * 16 + 8 + 24}px` }}>
-                    <div className="neo-loading-spinner" /> Loading...
+                  <div className={`neo-children-container ${isOpen ? 'neo-open' : 'neo-closed'}`}>
+                    {entry.is_dir && isOpen && isLoading && (
+                      <div className="neo-tree-loading" style={{ paddingLeft: `${(level + 1) * 16 + 8 + 24}px` }}>
+                        <div className="neo-loading-spinner" /> Loading...
+                      </div>
+                    )}
+                    {entry.is_dir && isOpen && children.length > 0 && renderEntries(children, level + 1)}
                   </div>
-                )}
-                {entry.is_dir && isOpen && children.length > 0 && renderEntries(children, level + 1)}
-              </div>
-            </div>
-          );
-        })}
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
     );
   };
@@ -135,7 +179,22 @@ export function FileTree({ onFileSelect, refreshToken = 0, selectedFile }: FileT
   return (
     <section className="neo-file-tree-panel">
       <div className="neo-tree-header">
-        <h3>Explorer</h3>
+        <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+          <h3 style={{margin: 0}}>Explorer</h3>
+          <label style={{fontSize: '12px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '6px'}}>
+            <input
+              type="checkbox"
+              checked={useSemantic}
+              onChange={(e) => {
+                const newVal = e.target.checked;
+                setUseSemantic(newVal);
+                // Load immediately with the new value to avoid race with state update
+                void loadRoot(newVal);
+              }}
+            />
+            Semantic categories
+          </label>
+        </div>
       </div>
       {error && (
         <div className="file-tree-error">
