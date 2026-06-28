@@ -325,7 +325,7 @@ class LocalSLPFS:
         }
     
     def process_natural_language(self, user_input: str) -> Dict[str, Any]:
-        """Process natural language command"""
+        """Process natural language command with search fallback."""
         
         # Parse command with LLM
         parsed = self.llm.parse_command(user_input)
@@ -334,21 +334,27 @@ class LocalSLPFS:
             or parsed.get('parameters', {}).get('raw_ollama_output')
         )
 
-        # Surface LLM/connection errors directly
-        if parsed.get('operation') == 'error':
+        # If the LLM is uncertain or errors out, fall back to semantic search
+        # with the original input as query.  This makes the assistant useful
+        # even when the model cannot parse a formal command.
+        if parsed.get('operation') in ('error', None) or parsed.get('confidence', 0) < 0.5:
+            search_results = self.search_files(query=user_input, k=5)
+            if search_results.get('success') and search_results.get('results'):
+                return {
+                    "success": True,
+                    "query": user_input,
+                    "results": search_results['results'],
+                    "count": search_results.get('count', 0),
+                    "source": "semantic_fallback",
+                    "message": f"Found {search_results.get('count', 0)} results for your query.",
+                    "ollama_output": raw_ollama_output,
+                }
             return {
                 "success": False,
                 "error": parsed.get('parameters', {}).get('message', 'LLM request failed'),
                 "ollama_output": raw_ollama_output,
             }
-        
-        if parsed['confidence'] < 0.5:
-            return {
-                "success":  False,
-                "error": "Could not understand command.  Try 'help' for examples.",
-                "ollama_output": raw_ollama_output,
-            }
-        
+
         operation = parsed['operation']
         # Normalize common aliases from model output.
         operation_aliases = {
@@ -358,7 +364,7 @@ class LocalSLPFS:
             "make_dir": "create_dir",
         }
         operation = operation_aliases.get(operation, operation)
-        params = parsed. get('parameters', {})
+        params = parsed.get('parameters', {})
 
         if operation == 'chat':
             return {
@@ -377,8 +383,8 @@ class LocalSLPFS:
         result['ollama_output'] = raw_ollama_output
         
         # Generate friendly response
-        if result. get('success'):
-            summary = self. llm.summarize_results(operation, result)
+        if result.get('success'):
+            summary = self.llm.summarize_results(operation, result)
             result['summary'] = summary
         
         return result

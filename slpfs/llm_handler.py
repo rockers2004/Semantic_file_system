@@ -103,8 +103,46 @@ class OllamaHandler:
         except requests.RequestException: 
             return False
     
+    def _call_llm(self, system_prompt: str, user_content: str, temperature: float = 0.05) -> Optional[dict]:
+        """Send a chat request to Ollama and return the parsed response dict, or None on failure."""
+        try:
+            response = requests.post(
+                self.chat_url,
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "stream": False,
+                    "options": {
+                        "temperature": temperature,
+                        "num_predict": 300,
+                    },
+                },
+                timeout=self.request_timeout,
+            )
+            if response.status_code != 200:
+                logger.error("LLM request failed: status=%s body=%s", response.status_code, response.text.strip())
+                return None
+            result = response.json()
+            content = result.get("message", {}).get("content", "").strip()
+            if not content:
+                return None
+            json_str = _extract_first_json_block(content)
+            if not json_str:
+                return None
+            parsed = json.loads(json_str)
+            if not isinstance(parsed, dict):
+                return None
+            parsed["raw_ollama_output"] = content
+            return parsed
+        except Exception as exc:
+            logger.exception("LLM call error: %s", exc)
+            return None
+
     def parse_command(self, user_input: str) -> Dict[str, Any]:
-        """Parse natural language command using LLM"""
+        """Parse natural language command using LLM, with retry on JSON failure."""
         forced_operation, remaining_input = _extract_explicit_operation(user_input)
         forced_operation_block = ""
         if forced_operation:
@@ -120,11 +158,11 @@ Explicit operation prefix detected:
         system_prompt = f"""You are a file system command parser. Parse the user's natural language command into a structured JSON response.
 
 Available operations:
+- search: Search files semantically (params: query, k, keywords)
 - create_file: Create a new file (params: file_name, content)
 - create_dir: Create a directory (params: dir_name)
 - write: Write/append content to a file (params: file_name, content, append)
 - read: Read a file (params: file_name)
-- search: Search files semantically (params: query, k, keywords)
 - list: List files in directory (params: subdir)
 - delete: Delete a file/directory (params: file_name)
 - move: Move/rename a file (params: source, destination)
@@ -134,9 +172,11 @@ Available operations:
 - chat: Normal conversation/small talk/non-filesystem query (params: message)
 
 Important rules:
-- If user text is conversational (greeting, small talk, general question), return operation "chat".
-- Do NOT force filesystem operations for normal conversation.
-- Use filesystem operations only when user clearly asks for file actions.
+- If the user is asking a question, looking for information, or describing something they want to find, ALWAYS use "search". This is the most common case.
+- If the user uses words like "find", "search", "look for", "show", "get", "where is", "do you have", "find me", "show me" followed by a topic, use "search".
+- Even without those keywords, if the input looks like a search query (e.g., "python tutorial", "meeting notes", "invoice pdf"), use "search".
+- ONLY use "chat" for pure greetings, small talk, or general knowledge questions unrelated to files.
+- Do NOT use "chat" for queries that could be file searches.
 {forced_operation_block}
 
 Return ONLY valid JSON in this format:
@@ -150,6 +190,18 @@ Return ONLY valid JSON in this format:
 }}
 
 Examples:
+User: "find me files about machine learning"
+{{"operation": "search", "parameters": {{"query": "machine learning", "k": 5}}, "confidence": 0.95}}
+
+User: "show me python scripts"
+{{"operation": "search", "parameters": {{"query": "python scripts", "k": 5}}, "confidence": 0.95}}
+
+User: "where is my resume"
+{{"operation": "search", "parameters": {{"query": "resume", "k": 5}}, "confidence": 0.95}}
+
+User: "pictures from my trip"
+{{"operation": "search", "parameters": {{"query": "trip pictures", "k": 5}}, "confidence": 0.95}}
+
 User: "create a file called notes.txt"
 {{"operation": "create_file", "parameters": {{"file_name": "notes.txt"}}, "confidence": 0.9}}
 
@@ -181,92 +233,22 @@ User: "hello how are you"
                 f'Remaining request: "{remaining_input}"'
             )
 
-        try:
-            # Call Ollama
-            response = requests.post(
-                self.chat_url,
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": model_input}
-                    ],
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.1,
-                        "num_predict": 250
-                    }
-                },
-                timeout=self.request_timeout
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                content = result['message']['content'].strip()
-                
-                # Extract JSON from response robustly
-                json_str = _extract_first_json_block(content)
-                if json_str:
-                    try:
-                        parsed = json.loads(json_str)
-                        if isinstance(parsed, dict):
-                            parsed["raw_ollama_output"] = content
-                            return parsed
-                        return {
-                            "operation": "error",
-                            "parameters": {
-                                "message": "Parsed JSON is not an object",
-                                "raw_ollama_output": content,
-                            },
-                            "confidence": 0.0,
-                        }
-                    except json.JSONDecodeError as e:
-                        return {
-                            "operation": "error",
-                            "parameters": {
-                                "message": f"Parse error: {e}",
-                                "raw_ollama_output": content,
-                            },
-                            "confidence": 0.0,
-                        }
-                else:
-                    return {
-                        "operation": "error",
-                        "parameters": {
-                            "message": "No JSON found in LLM response",
-                            "raw_ollama_output": content,
-                        },
-                        "confidence": 0.0,
-                    }
-            
-            error_detail = response.text.strip()
-            logger.error(
-                "LLM request failed: status=%s body=%s",
-                response.status_code,
-                error_detail,
-            )
-            return {
-                "operation": "error",
-                "parameters": {
-                    "message": (
-                        f"LLM request failed ({response.status_code})"
-                        f": {error_detail or 'No response body'}"
-                    ),
-                    "raw_ollama_output": error_detail or None,
-                },
-                "confidence": 0.0,
-            }
-        
-        except Exception as e:
-            logger.exception("LLM parsing error")
-            return {
-                "operation": "error",
-                "parameters": {
-                    "message": str(e),
-                    "raw_ollama_output": None,
-                },
-                "confidence": 0.0,
-            }
+        # First attempt
+        parsed = self._call_llm(system_prompt, model_input, temperature=0.05)
+        if parsed is not None:
+            return parsed
+
+        # Retry once with a stricter prompt on failure
+        retry_prompt = system_prompt + "\n\nIMPORTANT: You MUST respond with ONLY a valid JSON object. No explanations, no extra text, no markdown. JSON only."
+        parsed = self._call_llm(retry_prompt, model_input, temperature=0.01)
+        if parsed is not None:
+            return parsed
+
+        return {
+            "operation": "error",
+            "parameters": {"message": "Could not parse command after retry."},
+            "confidence": 0.0,
+        }
     
     def summarize_results(self, operation: str, results: Any) -> str:
         """Generate natural language summary of results"""

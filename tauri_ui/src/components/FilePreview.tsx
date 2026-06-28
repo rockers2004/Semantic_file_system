@@ -1,249 +1,146 @@
-import { useEffect, useState } from "react";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { readFile, TreeEntry } from "../api/files";
+import { useEffect, useCallback, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { TreeEntry } from "../api/files";
+import { PreviewHeader } from "./PreviewHeader";
+import { PreviewTabs, PreviewTabId } from "./PreviewTabs";
+import { PdfPreviewCard } from "./PdfPreviewCard";
+import { FileMetadata } from "./FileMetadata";
+import { ActionBar } from "./ActionBar";
+import { SemanticGraph } from "./SemanticGraph";
 
 interface FilePreviewProps {
   selectedPath: string;
   selectedEntry?: TreeEntry | null;
+  similarityScore?: number;
+  tags?: string[];
+  onFileSelect?: (path: string) => void;
 }
 
 type PreviewKind = "text" | "image" | "video" | "pdf" | "protected";
 
 const KNOWN_PROTECTED_EXTENSIONS = [
-  ".age",
-  ".asc",
-  ".dmg",
-  ".enc",
-  ".encrypted",
-  ".gpg",
-  ".hc",
-  ".kdbx",
-  ".p12",
-  ".pfx",
-  ".pgp",
-  ".sparsebundle",
-  ".sparseimage",
-  ".tc",
+  ".age", ".asc", ".dmg", ".enc", ".encrypted", ".gpg", ".hc",
+  ".kdbx", ".p12", ".pfx", ".pgp", ".sparsebundle", ".sparseimage", ".tc",
 ];
 
 function getPreviewKind(path: string, selectedEntry?: TreeEntry | null): PreviewKind {
-  if (selectedEntry?.is_protected) {
-    return "protected";
-  }
+  if (selectedEntry?.is_protected) return "protected";
 
   const lower = path.toLowerCase();
   const imageExt = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"];
   const videoExt = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".avi", ".mkv"];
 
-  if (KNOWN_PROTECTED_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
-    return "protected";
-  }
-  if (lower.endsWith(".pdf")) {
-    return "pdf";
-  }
-  if (imageExt.some((ext) => lower.endsWith(ext))) {
-    return "image";
-  }
-  if (videoExt.some((ext) => lower.endsWith(ext))) {
-    return "video";
-  }
+  if (KNOWN_PROTECTED_EXTENSIONS.some((ext) => lower.endsWith(ext))) return "protected";
+  if (lower.endsWith(".pdf")) return "pdf";
+  if (imageExt.some((ext) => lower.endsWith(ext))) return "image";
+  if (videoExt.some((ext) => lower.endsWith(ext))) return "video";
   return "text";
 }
 
-function getMediaSrc(path: string): string {
-  try {
-    return convertFileSrc(path);
-  } catch {
-    const normalized = path.replace(/\\/g, "/");
-    return `file:///${encodeURI(normalized)}`;
-  }
-}
-
-export function FilePreview({ selectedPath, selectedEntry }: FilePreviewProps) {
-  const [content, setContent] = useState("");
-  const [encoding, setEncoding] = useState("");
-  const [size, setSize] = useState<number | null>(null);
-  const [modified, setModified] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [mediaSrc, setMediaSrc] = useState("");
-  const [mediaError, setMediaError] = useState("");
+export function FilePreview({ selectedPath, selectedEntry, similarityScore, tags, onFileSelect }: FilePreviewProps) {
+  const [activeTab, setActiveTab] = useState<PreviewTabId>("overview");
   const [openError, setOpenError] = useState("");
 
   const previewKind = getPreviewKind(selectedPath, selectedEntry);
 
   useEffect(() => {
-    let isActive = true;
+    setActiveTab("overview");
+    setOpenError("");
+  }, [selectedPath]);
 
-    const loadFile = async () => {
-      if (!selectedPath) {
-        setContent("");
-        setEncoding("");
-        setSize(null);
-        setModified("");
-        setMediaSrc("");
-        setMediaError("");
-        setError("");
-        setLoading(false);
-        return;
-      }
-
-      if (previewKind !== "text") {
-        setContent("");
-        setEncoding("");
-        setSize(null);
-        setModified("");
-        setError("");
-        setMediaError("");
-        setMediaSrc(previewKind === "pdf" ? "" : getMediaSrc(selectedPath));
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError("");
-      setMediaSrc("");
-      setMediaError("");
-
-      try {
-        const data = await readFile(selectedPath);
-
-        if (!isActive) {
-          return;
-        }
-
-        setContent(data.content);
-        setEncoding(data.encoding);
-        setSize(data.size);
-        setModified(data.modified);
-      } catch (err) {
-        if (!isActive) {
-          return;
-        }
-
-        setContent("");
-        setEncoding("");
-        setSize(null);
-        setModified("");
-        setMediaSrc("");
-        setMediaError("");
-        setError(err instanceof Error ? err.message : "Failed to load file preview");
-      } finally {
-        if (isActive) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void loadFile();
-
-    return () => {
-      isActive = false;
-    };
-  }, [selectedPath, previewKind]);
-
-  const handleOpenSelectedPath = async () => {
-    if (!selectedPath) {
-      return;
-    }
-
+  const handleOpen = useCallback(async () => {
+    if (!selectedPath) return;
     setOpenError("");
     try {
       await invoke("open_in_default_app", { path: selectedPath });
     } catch (err) {
-      setOpenError(err instanceof Error ? err.message : String(err || "Failed to open this file in the default app"));
+      setOpenError(err instanceof Error ? err.message : String(err || "Failed to open"));
     }
-  };
+  }, [selectedPath]);
+
+  const handleOpenFolder = useCallback(async () => {
+    if (!selectedPath) return;
+    try {
+      await invoke("show_in_folder", { path: selectedPath });
+    } catch {
+      setOpenError("Could not open containing folder");
+    }
+  }, [selectedPath]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
+      void handleOpen();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "o") {
+      e.preventDefault();
+      void handleOpenFolder();
+    }
+  }, [handleOpen, handleOpenFolder]);
 
   if (!selectedPath) {
-    return <div className="file-preview-placeholder">Select a file to see what's inside.</div>;
+    return (
+      <section className="preview-card">
+        <div className="preview-placeholder">Select a file to see what's inside.</div>
+      </section>
+    );
   }
 
+  const fileName = selectedPath.split(/[/\\]/).pop() || selectedPath;
+  const resolvedTags = tags ?? selectedEntry?.tags ?? [];
+
   return (
-    <section className="file-preview-panel">
-      <div className="file-preview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h3>{selectedPath.split(/[/\\]/).pop()}</h3>
-          <p className="file-preview-path">{selectedPath}</p>
-        </div>
-        <button
-          type="button"
-          className="btn-icon"
-          onClick={() => void handleOpenSelectedPath()}
-          title="Open in default app"
-          style={{ width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--accent)', color: 'white', borderRadius: '50%' }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-        </button>
+    <section className="preview-card" onKeyDown={handleKeyDown} tabIndex={0}>
+      <div className="preview-card-header">
+        <PreviewHeader fileName={fileName} filePath={selectedPath} />
+      </div>
+      <div className="preview-card-tabs">
+        <PreviewTabs activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
 
-      {openError && <div className="file-preview-error" style={{ color: 'red', marginTop: '10px' }}>{openError}</div>}
+      <div className="preview-card-body">
+        {activeTab === "overview" && (
+          <>
+            <PdfPreviewCard
+              previewKind={previewKind}
+              selectedPath={selectedPath}
+              selectedEntry={selectedEntry}
+            />
+            <FileMetadata
+              selectedEntry={selectedEntry}
+              selectedPath={selectedPath}
+              similarityScore={similarityScore}
+              tags={resolvedTags}
+            />
+          </>
+        )}
 
-      {loading && <div className="file-preview-status status-loading" style={{ marginTop: '20px' }}>Loading...</div>}
-      
-      {error && <div className="file-preview-error error-bubble" style={{ marginTop: '20px', padding: '12px' }}>{error}</div>}
-
-      {!loading && !error && previewKind === "protected" && (
-        <div className="file-preview-protected">
-          <h4>Protected file</h4>
-          <p>
-            {selectedEntry?.security_reason || "This file type is treated as protected, so content preview is skipped."}
-          </p>
-          <p className="file-preview-protected-meta">
-            {selectedEntry?.security_status || "metadata-only"} indexing is available for name and path search.
-          </p>
-          <button className="btn-confirm" type="button" onClick={() => void handleOpenSelectedPath()} style={{ width: 'auto', padding: '10px 24px' }}>
-            Open in Default App
-          </button>
-        </div>
-      )}
-
-      {!loading && !error && previewKind === "text" && (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <pre className="file-preview-content" aria-label="file content preview">
-            {content}
-          </pre>
-          <div className="file-preview-meta" style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--text-dim)', paddingTop: '8px' }}>
-            <span>{(size ?? 0) < 1024 ? `${size} B` : `${Math.round((size ?? 0) / 1024)} KB`}</span>
-            <span>{encoding || "Unknown encoding"}</span>
-            <span>{modified ? new Date(modified).toLocaleString() : "Unknown date"}</span>
-          </div>
-        </div>
-      )}
-
-      {!loading && !error && previewKind === "image" && mediaSrc && (
-        <div className="file-preview-media-wrap">
-          <img
-            className="file-preview-image"
-            src={mediaSrc}
-            alt="Preview"
-            onError={() => setMediaError("Unable to display image preview.")}
+        {activeTab === "content" && (
+          <PdfPreviewCard
+            previewKind={previewKind}
+            selectedPath={selectedPath}
+            selectedEntry={selectedEntry}
           />
-        </div>
-      )}
+        )}
 
-      {!loading && !error && previewKind === "video" && mediaSrc && (
-        <div className="file-preview-media-wrap">
-          <video
-            className="file-preview-video"
-            src={mediaSrc}
-            controls
-            preload="metadata"
-            onError={() => setMediaError("Unable to play video preview.")}
+        {activeTab === "graph" && (
+          <SemanticGraph setSelectedFile={onFileSelect || (() => {})} />
+        )}
+
+        {activeTab === "info" && (
+          <FileMetadata
+            selectedEntry={selectedEntry}
+            selectedPath={selectedPath}
+            similarityScore={similarityScore}
+            tags={resolvedTags}
           />
-        </div>
-      )}
+        )}
 
-      {mediaError && <div className="file-preview-error error-bubble" style={{ marginTop: '20px', padding: '12px' }}>{mediaError}</div>}
+        {openError && <div className="preview-error">{openError}</div>}
+      </div>
 
-      {!loading && !error && previewKind === "pdf" && (
-        <div className="file-preview-placeholder">
-          <p>We don't preview PDFs directly to keep the app fast.</p>
-          <button className="btn-confirm" type="button" onClick={() => void handleOpenSelectedPath()} style={{ width: 'auto', padding: '10px 24px' }}>
-            Open PDF
-          </button>
-        </div>
-      )}
+      <div className="preview-card-actions">
+        <ActionBar onOpen={handleOpen} onOpenFolder={handleOpenFolder} />
+      </div>
     </section>
   );
 }

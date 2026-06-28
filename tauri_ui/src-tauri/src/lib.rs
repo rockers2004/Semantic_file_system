@@ -55,6 +55,52 @@ fn open_in_default_app(path: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn show_in_folder(path: String) -> Result<(), String> {
+    let resolved_path = PathBuf::from(&path);
+    if !resolved_path.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+
+    let normalized = resolved_path
+        .canonicalize()
+        .unwrap_or(resolved_path)
+        .to_string_lossy()
+        .to_string();
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg("/select,")
+            .arg(&normalized)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder in Explorer: {}", e))?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("-R")
+            .arg(&normalized)
+            .spawn()
+            .map_err(|e| format!("Failed to reveal file in Finder: {}", e))?;
+        Ok(())
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let parent = Path::new(&normalized)
+            .parent()
+            .ok_or_else(|| "Cannot determine parent directory".to_string())?;
+        Command::new("xdg-open")
+            .arg(parent.to_string_lossy().to_string())
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+        Ok(())
+    }
+}
+
 fn find_project_root(start: &Path) -> Option<PathBuf> {
     let candidates = [
         start.to_path_buf(),
@@ -134,7 +180,7 @@ pub fn run() {
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, open_in_default_app])
+        .invoke_handler(tauri::generate_handler![greet, open_in_default_app, show_in_folder])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(move |_app_handle, event| {

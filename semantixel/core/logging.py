@@ -28,5 +28,16 @@ def setup_logging(level=logging.INFO):
 
     return logger
 
+
+def log_exception(logger_instance, message: str, *args, **kwargs):
+    """Log an exception with traceback at ERROR level.
+
+    Usage::
+
+        log_exception(logger, "Failed to process %s", file_path)
+    """
+    logger_instance.exception(message, *args, **kwargs)
+
+
 # Primary logger for the application
 logger = setup_logging()

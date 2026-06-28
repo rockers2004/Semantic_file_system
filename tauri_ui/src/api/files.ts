@@ -13,6 +13,7 @@ export interface TreeEntry {
   category?: string | null;
   category_confidence?: number | null;
   category_reason?: string | null;
+  tags?: string[];
 }
 
 interface TreeResponse {
@@ -58,6 +59,7 @@ export interface SearchResult {
   timestamp?: number;
   composite_id?: string;
   media_id?: string;
+  tags?: string[];
 }
 
 interface SearchResponse {

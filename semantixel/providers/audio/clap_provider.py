@@ -1,14 +1,19 @@
 """CLAP audio/text embedding provider via Hugging Face Transformers."""
 
-import torch
-import librosa
 from typing import List, Union
-from transformers import ClapModel, ClapProcessor
 from semantixel.providers.base import BaseModelProvider
 from semantixel.providers.registry import provider
 from semantixel.core.logging import logger
 from semantixel.utils import has_audio_stream
 from semantixel.core.device import detect_device, unwrap_output, clear_gpu_cache
+
+try:
+    import torch
+    import librosa
+    from transformers import ClapModel, ClapProcessor
+    _HAS_CLAP_DEPS = True
+except ModuleNotFoundError:
+    _HAS_CLAP_DEPS = False
 
 DEFAULT_CLAP_CHECKPOINT = "laion/clap-htsat-unfused"
 
@@ -31,6 +36,9 @@ class HFAudioCLAPProvider(BaseModelProvider):
 
     def load(self):
         """Load the CLAP model and processor onto the selected device."""
+        if not _HAS_CLAP_DEPS:
+            logger.warning("CLAP dependencies (torch, librosa, transformers) are not installed")
+            return
         try:
             logger.info(
                 "Loading CLAP model: %s on %s", self.checkpoint, self.device
@@ -54,8 +62,8 @@ class HFAudioCLAPProvider(BaseModelProvider):
             A 512-dimensional embedding vector.  Returns a zero vector
             when the file has no audio stream or processing fails.
         """
-        if not self.is_loaded:
-            self.load()
+        if not _HAS_CLAP_DEPS or not self.is_loaded:
+            return [0.0] * 512
 
         try:
             if not has_audio_stream(audio_path):
@@ -91,8 +99,8 @@ class HFAudioCLAPProvider(BaseModelProvider):
         Returns:
             A 512-dimensional embedding vector.
         """
-        if not self.is_loaded:
-            self.load()
+        if not _HAS_CLAP_DEPS or not self.is_loaded:
+            return [0.0] * 512
 
         try:
             inputs = self.processor(text=text, return_tensors="pt").to(self.device)

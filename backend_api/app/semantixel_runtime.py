@@ -54,6 +54,9 @@ class SemantixelRuntimeService:
         self.settings = settings
         self.index_service = None
         self.search_service = None
+        self._scan_completed = False
+        self._scan_lock = RLock()
+        self._scan_in_progress = False
 
     @property
     def enabled(self) -> bool:
@@ -87,19 +90,40 @@ class SemantixelRuntimeService:
         if not include_dirs:
             return
 
-        try:
-            indexed_count = int(self.index_service.image_collection.count())
-            indexed_count += int(getattr(self.index_service, "text_collection").count())
-            indexed_count += int(getattr(self.index_service, "audio_collection").count())
-        except Exception as exc:
-            logger.warning("Unable to inspect multimodal index count before search: %s", exc)
+        if self._scan_completed:
             return
+
+        with self._scan_lock:
+            if self._scan_completed:
+                return
+            if self._scan_in_progress:
+                logger.info("Scan already in progress by another request, waiting...")
+                return
+
+            self._scan_in_progress = True
+
+        indexed_count = 0
+        for col_name in ("image_collection", "text_collection", "audio_collection"):
+            try:
+                indexed_count += int(getattr(self.index_service, col_name).count())
+            except StopIteration:
+                pass
+            except Exception as exc:
+                logger.warning("Unable to count %s: %s", col_name, exc)
 
         if indexed_count > 0:
+            with self._scan_lock:
+                self._scan_completed = True
+                self._scan_in_progress = False
             return
 
-        logger.info("Multimodal index is empty. Running an initial scan before search.")
-        self.index_service.run_full_scan()
+        logger.info("Multimodal index is empty or needs refresh. Running scan before search.")
+        try:
+            self.index_service.run_full_scan()
+        finally:
+            with self._scan_lock:
+                self._scan_completed = True
+                self._scan_in_progress = False
 
     def _apply_scan_scope(self) -> tuple[list[str], list[str]]:
         """Apply include/exclude directories to Semantixel global config.

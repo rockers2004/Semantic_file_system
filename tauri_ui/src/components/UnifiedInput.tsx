@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { CommandResultItem, SkippedFileItem, runCommand, searchByImage, searchFiles } from "../api/files";
-import { SemanticGraph } from "./SemanticGraph";
 
 interface UnifiedInputProps {
   setSelectedFile: (path: string) => void;
@@ -288,12 +287,24 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
           setSelectedFile(data.results[0].path);
         }
       } else if (mode === "general") {
-        const data = await runCommand(trimmed);
-        setMessage(data.message);
-        setResults(data.results);
-        setSkippedFiles(data.skipped_files ?? []);
-        if (data.results.length > 0 && data.results[0].path) {
-          setSelectedFile(data.results[0].path);
+        // Try command parsing first; if it yields no results, fall back to search
+        const cmdData = await runCommand(trimmed);
+        if (cmdData.results && cmdData.results.length > 0) {
+          setMessage(cmdData.message);
+          setResults(cmdData.results);
+          setSkippedFiles(cmdData.skipped_files ?? []);
+          if (cmdData.results[0].path) {
+            setSelectedFile(cmdData.results[0].path);
+          }
+        } else {
+          // Fallback: treat plain input as a search query
+          const searchData = await searchFiles(trimmed, 10, "general");
+          setMessage(getSearchMessage(searchData.total, "files", searchData.error));
+          setResults(searchData.results as CommandResultItem[]);
+          setSkippedFiles([]);
+          if (searchData.results.length > 0 && searchData.results[0].path) {
+            setSelectedFile(searchData.results[0].path);
+          }
         }
       } else {
         const data = await searchFiles(trimmed, 10, mode, {
@@ -452,8 +463,6 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
             </select>
           </div>
         </div>
-
-        <SemanticGraph setSelectedFile={setSelectedFile} />
 
       </div>
     </section>

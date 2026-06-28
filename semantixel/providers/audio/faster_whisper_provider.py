@@ -1,12 +1,19 @@
 """Faster-Whisper (CTranslate2) audio transcription provider."""
 
-import torch
 from typing import Optional
 from semantixel.providers.base import AudioProvider
 from semantixel.providers.registry import provider
 from semantixel.core.logging import logger
 from semantixel.utils import has_audio_stream
 from semantixel.core.device import detect_device, clear_gpu_cache
+
+try:
+    import torch
+    import librosa
+    from faster_whisper import WhisperModel
+    _HAS_WHISPER_DEPS = True
+except ModuleNotFoundError:
+    _HAS_WHISPER_DEPS = False
 
 DEFAULT_WHISPER_CHECKPOINT = "tiny.en"
 
@@ -28,6 +35,9 @@ class FasterWhisperProvider(AudioProvider):
 
     def load(self):
         """Load the Faster-Whisper model."""
+        if not _HAS_WHISPER_DEPS:
+            logger.warning("Faster-Whisper dependencies are not installed")
+            return
         if self.model is not None:
             return
 
@@ -39,8 +49,6 @@ class FasterWhisperProvider(AudioProvider):
         )
 
         try:
-            from faster_whisper import WhisperModel
-
             self.model = WhisperModel(
                 self.checkpoint, device=self.device, compute_type=self.compute_type
             )
@@ -66,9 +74,9 @@ class FasterWhisperProvider(AudioProvider):
             Transcribed text, or ``None`` on failure.
         """
         self.load()
+        if self.model is None:
+            return None
         try:
-            import librosa
-
             if not has_audio_stream(file_path):
                 logger.debug(
                     "No audio stream found in %s, skipping transcription", file_path

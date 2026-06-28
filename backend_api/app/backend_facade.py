@@ -15,7 +15,7 @@ from backend_api.app.runtime_manager import get_backend_health_snapshot, initial
 from backend_api.app.semantixel_runtime import get_semantixel_config, get_semantixel_runtime
 from backend_api.app.slpfs_runtime import get_root_path, get_runtime, set_root_path
 from slpfs.file_security import classify_protected_file
-from slpfs.file_categories import categorize_file
+from slpfs.file_categories import categorize_file, extract_content_tags
 
 
 class BackendFacade:
@@ -59,6 +59,7 @@ class BackendFacade:
 
                 # Decide whether to compute semantic category using a small content sample
                 cat = {"category": None, "category_confidence": 0.0, "category_reason": None}
+                tags: list[str] = []
                 if semantic and not entry.is_dir() and not protected:
                     try:
                         # Read a small content sample safely
@@ -69,6 +70,7 @@ class BackendFacade:
                         except OSError:
                             sample = None
                         cat = categorize_file(entry, is_protected=False, content_sample=sample)
+                        tags = extract_content_tags(entry, content_sample=sample)
                     except Exception:
                         cat = {"category": None, "category_confidence": 0.0, "category_reason": None}
 
@@ -85,6 +87,7 @@ class BackendFacade:
                         "category": cat.get("category"),
                         "category_confidence": float(cat.get("category_confidence", 0.0) or 0.0),
                         "category_reason": cat.get("category_reason"),
+                        "tags": tags,
                     }
                 )
             except OSError:
@@ -123,10 +126,14 @@ class BackendFacade:
             raise OverflowError(f"File is too large for preview (>{max_preview_bytes} bytes)")
 
         raw = target.read_bytes()
-        if b"\x00" in raw:
+
+        try:
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError:
             raise ValueError("Binary file preview is not supported")
 
-        content = raw.decode("utf-8", errors="replace")
+        if not content.strip():
+            raise ValueError("Binary file preview is not supported")
 
         return {
             "path": str(target),

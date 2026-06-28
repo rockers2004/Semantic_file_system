@@ -31,7 +31,7 @@ try:
 except ImportError:
     PdfReader = None
 
-from slpfs.file_categories import categorize_file
+from slpfs.file_categories import categorize_file, extract_content_tags
 
     
 logger = logging.getLogger(__name__)
@@ -235,6 +235,9 @@ class VectorStore:
                         "category_reason": cat.get("category_reason"),
                     }
                 )
+                tags = extract_content_tags(file_path, content_sample=None)
+                if tags:
+                    metadata["tags"] = ", ".join(tags)
             except Exception:
                 logger.debug("Failed to compute category for metadata-only file: %s", file_path, exc_info=True)
             document = (
@@ -490,6 +493,9 @@ class VectorStore:
                         "category_reason": cat.get("category_reason"),
                     }
                 )
+                tags = extract_content_tags(file_path, content_sample=content_sample)
+                if tags:
+                    metadata["tags"] = ", ".join(tags)
             except Exception:
                 logger.debug("Failed to compute category for file: %s", file_path, exc_info=True)
             
@@ -635,6 +641,8 @@ class VectorStore:
                                 "category_reason": metadata.get('category_reason'),
                             }
                         )
+                    if metadata.get('tags'):
+                        formatted["tags"] = metadata.get('tags')
                     formatted_results.append(formatted)
             
             formatted_results.sort(key=lambda item: item["score"], reverse=True)

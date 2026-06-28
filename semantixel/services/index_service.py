@@ -42,15 +42,26 @@ class IndexService:
         self.db_path = db_path
         self.client = PersistentClient(path=db_path)
 
+        hnsw_config = {
+            "space": "cosine",
+            "ef_search": 500,
+            "ef_construction": 200,
+            "M": 32,
+        }
         self.image_collection = self.client.get_or_create_collection(
-            "images", metadata={"hnsw:space": "cosine"}
+            "images", metadata=hnsw_config
         )
         self.text_collection = self.client.get_or_create_collection(
-            "texts", metadata={"hnsw:space": "cosine"}
+            "texts", metadata=hnsw_config
         )
         self.audio_collection = self.client.get_or_create_collection(
-            "ambient_audio", metadata={"hnsw:space": "cosine"}
+            "ambient_audio", metadata=hnsw_config
         )
+        # Force HNSW params on existing collections too (get_or_create only applies on create)
+        for col in (self.image_collection, self.text_collection, self.audio_collection):
+            existing = col.metadata or {}
+            if existing.get("ef_search") != hnsw_config["ef_search"]:
+                col.modify(metadata=hnsw_config)
 
         self.image_indexer = ImageIndexer(self.image_collection, self.text_collection)
         self.audio_indexer = AudioIndexer(self.text_collection, self.audio_collection)

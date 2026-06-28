@@ -140,7 +140,7 @@ function App() {
 
           {isPreviewOpen && (
             <div className="preview-arena">
-              <FilePreview selectedPath={selectedFile} selectedEntry={selectedFileEntry} />
+              <FilePreview selectedPath={selectedFile} selectedEntry={selectedFileEntry} onFileSelect={handleFileSelect} />
             </div>
           )}
         </div>
