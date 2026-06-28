@@ -2,7 +2,7 @@ from typing import Optional
 from semantixel.core.config import config
 from semantixel.core.logging import logger
 from semantixel.providers.clip.hf_provider import HFCLIPProvider
-from semantixel.providers.base import OCRProvider
+from semantixel.providers.base import OCRProvider, AudioProvider, BaseModelProvider
 from semantixel.providers.text.hf_provider import HFTextEmbeddingProvider
 
 try:
@@ -22,6 +22,36 @@ class NullOCRProvider(OCRProvider):
 
     def apply_ocr(self, images, threshold: float = 0.4):
         return [None for _ in images]
+
+class NullAudioProvider(AudioProvider):
+    """Safe transcription fallback when optional audio dependencies are unavailable."""
+
+    def load(self):
+        return None
+
+    def unload(self):
+        return None
+
+    def transcribe(self, file_path: str, max_duration: float = 60.0):
+        _ = (file_path, max_duration)
+        return None
+
+class NullCLAPProvider(BaseModelProvider):
+    """Safe CLAP fallback when optional audio embedding dependencies are unavailable."""
+
+    def load(self):
+        return None
+
+    def unload(self):
+        return None
+
+    def get_audio_embeddings(self, audio_path: str):
+        _ = audio_path
+        return [0.0] * 512
+
+    def get_text_embeddings(self, text: str):
+        _ = text
+        return [0.0] * 512
 
 class ModelManager:
     """
@@ -43,6 +73,8 @@ class ModelManager:
         self._clip_provider = None
         self._ocr_provider = None
         self._text_provider = None
+        self._audio_provider = None
+        self._clap_provider = None
         self._initialized = True
 
     @property
@@ -82,14 +114,50 @@ class ModelManager:
                 self._text_provider = HFTextEmbeddingProvider()
         return self._text_provider
 
+    @property
+    def audio(self):
+        if self._audio_provider is None:
+            provider_type = config.audio.provider
+            if provider_type == "faster_whisper":
+                try:
+                    from semantixel.providers.audio.faster_whisper_provider import FasterWhisperProvider
+
+                    self._audio_provider = FasterWhisperProvider(
+                        checkpoint=config.audio.faster_whisper_model
+                    )
+                except Exception as exc:
+                    logger.warning("Audio transcription provider unavailable: %s", exc)
+                    self._audio_provider = NullAudioProvider()
+            else:
+                logger.warning("Unsupported audio provider: %s. Audio transcription disabled.", provider_type)
+                self._audio_provider = NullAudioProvider()
+        return self._audio_provider
+
+    @property
+    def clap(self):
+        if self._clap_provider is None:
+            try:
+                from semantixel.providers.audio.clap_provider import HFAudioCLAPProvider
+
+                self._clap_provider = HFAudioCLAPProvider()
+            except Exception as exc:
+                logger.warning("CLAP provider unavailable: %s", exc)
+                self._clap_provider = NullCLAPProvider()
+        return self._clap_provider
+
     def unload_all(self):
         """Unload all models to free memory/VRAM."""
-        if self._clip_provider:
-            self._clip_provider.unload()
-        if self._ocr_provider:
-            self._ocr_provider.unload()
-        if self._text_provider:
-            self._text_provider.unload()
+        for attr in (
+            "_clip_provider",
+            "_ocr_provider",
+            "_text_provider",
+            "_audio_provider",
+            "_clap_provider",
+        ):
+            provider = getattr(self, attr, None)
+            if provider:
+                provider.unload()
+                setattr(self, attr, None)
 
 # Global model manager instance
 model_manager = ModelManager()

@@ -29,7 +29,18 @@ class TextEmbedConfig(BaseModel):
     openai_model: str = ""
     provider: str = "HF_transformers"
 
+class AudioConfig(BaseModel):
+    enabled: bool = True
+    transcription_enabled: bool = True
+    clap_enabled: bool = False
+    max_duration_seconds: float = 0
+    HF_transformers_whisper: str = "openai/whisper-tiny"
+    faster_whisper_model: str = "tiny.en"
+    provider: str = "faster_whisper"
+    transcription_max_duration: float = 60.0
+
 class SemantixelConfig(BaseSettings):
+    audio: AudioConfig = Field(default_factory=AudioConfig)
     batch_size: int = 16
     clip: CLIPConfig = Field(default_factory=CLIPConfig)
     deep_scan: bool = True
@@ -72,6 +83,7 @@ def load_config(config_path: str = "config.yaml", default_path: str = "config.de
     # consume the keys that belong to its own schema and ignore the rest.
     supported_top_level = {
         "batch_size",
+        "audio",
         "clip",
         "deep_scan",
         "exclude_directories",
@@ -93,6 +105,8 @@ def load_config(config_path: str = "config.yaml", default_path: str = "config.de
         for key in ("include_directories", "exclude_directories"):
             if key in multimodal_section:
                 semantixel_data[key] = multimodal_section[key]
+        if isinstance(multimodal_section.get("audio"), dict):
+            semantixel_data["audio"] = multimodal_section["audio"]
 
     return SemantixelConfig(**semantixel_data)
 

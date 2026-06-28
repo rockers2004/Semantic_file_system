@@ -54,9 +54,10 @@ export interface SearchResult {
   is_dir: false;
   source?: string;
   kind?: string;
-  media_type?: string;
+  media_type?: "image" | "video" | "audio" | string;
   timestamp?: number;
   composite_id?: string;
+  media_id?: string;
 }
 
 interface SearchResponse {
@@ -202,8 +203,37 @@ export async function updateRootPath(rootPath: string): Promise<ConfigResponse["
   return json.data;
 }
 
+export interface GraphNode {
+  id: string;
+  path: string;
+  fileName?: string;
+  type?: string;
+  media_id?: string;
+  composite_id?: string;
+  timestamp?: number;
+}
+
+export interface GraphLink {
+  source: string;
+  target: string;
+  value: number;
+}
+
+interface GraphResponse {
+  ok: boolean;
+  data: {
+    source: string;
+    graph: {
+      nodes: GraphNode[];
+      links: GraphLink[];
+    };
+  };
+  error?: { code?: string; message?: string; details?: unknown } | null;
+  meta?: unknown;
+}
+
 type SearchOptions = {
-  mediaType?: "all" | "image" | "video";
+  mediaType?: "all" | "image" | "video" | "audio";
   topK?: number;
   threshold?: number;
 };
@@ -238,6 +268,54 @@ export async function searchFiles(
   }
 
   return json.data;
+}
+
+export async function searchByImage(
+  imagePath: string,
+  topK = 10,
+  options: Pick<SearchOptions, "mediaType" | "threshold"> = {},
+): Promise<SearchResponse["data"]> {
+  const response = await fetch(`${BACKEND_URL}/api/v1/search/image`, {
+    method: "POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify({
+      image_path: imagePath,
+      top_k: topK,
+      media_type: options.mediaType ?? "all",
+      threshold: options.threshold,
+    }),
+  });
+
+  if(!response.ok) {
+    const text = await response.text();
+    throw new Error(`Image search API failed: ${response.status} ${text}`);
+  }
+
+  const json = (await response.json()) as SearchResponse;
+  if(!json.ok) {
+    throw new Error(json.error?.message || "Image search failed");
+  }
+
+  return json.data;
+}
+
+export async function fetchMultimodalGraph(): Promise<GraphResponse["data"]["graph"]> {
+  const response = await fetch(`${BACKEND_URL}/api/v1/multimodal/graph`, {
+    method: "GET",
+    headers: { "Content-Type":"application/json" },
+  });
+
+  if(!response.ok) {
+    const text = await response.text();
+    throw new Error(`Graph API failed: ${response.status} ${text}`);
+  }
+
+  const json = (await response.json()) as GraphResponse;
+  if(!json.ok) {
+    throw new Error(json.error?.message || "Graph load failed");
+  }
+
+  return json.data.graph;
 }
 
 export async function runCommand(text: string): Promise<CommandResponse["data"]> {

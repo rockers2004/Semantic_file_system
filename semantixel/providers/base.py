@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Union, Optional
+from typing import List, Union, Optional
 from PIL import Image
 
 class BaseModelProvider(ABC):
@@ -35,4 +35,9 @@ class OCRProvider(BaseModelProvider):
 class TextEmbeddingProvider(BaseModelProvider):
     @abstractmethod
     def get_embeddings(self, text: str) -> List[float]:
+        pass
+
+class AudioProvider(BaseModelProvider):
+    @abstractmethod
+    def transcribe(self, file_path: str, max_duration: float = 60.0) -> Optional[str]:
         pass

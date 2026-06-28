@@ -19,7 +19,15 @@ multimodal:
   enabled: true
   db_path: ./db_multimodal
   include_directories:
-    - C:\Users\Omsai\Desktop\lsfs_test
+    - /Users/ssgmcollege/Desktop/lsfs_test_2
   exclude_directories: []
   top_k_default: 5
   threshold_default: 0.0
+  audio:
+    enabled: true
+    transcription_enabled: true
+    clap_enabled: false
+    max_duration_seconds: 0
+    provider: faster_whisper
+    faster_whisper_model: tiny.en
+    transcription_max_duration: 60.0

@@ -3,15 +3,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from semantixel.core.logging import logger
+from semantixel.media_types import is_media_file
 
 def scan_directory(directory, exclude_directories):
     """
-    Recursively scans a directory for image and video files, excluding any directories specified.
+    Recursively scans a directory for media files, excluding any directories specified.
     """
-    media_extensions = {
-        ".jpg", ".jpeg", ".png", ".gif", ".bmp",
-        ".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".ogg",
-    }
     images = []
     try:
         if not os.path.isdir(directory):
@@ -22,7 +19,7 @@ def scan_directory(directory, exclude_directories):
                 if (
                     entry.is_file()
                     and not entry.name.startswith("._")
-                    and entry.name.lower().endswith(tuple(media_extensions))
+                    and is_media_file(entry.name)
                 ):
                     images.append(entry.path)
                 elif entry.is_dir():

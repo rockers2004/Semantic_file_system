@@ -202,11 +202,13 @@ class BackendFacade:
         resolved_mode = (mode or "general").strip().lower()
         if resolved_mode in {"general", "normal", "text", "semantic", "slpfs"}:
             return self._search_slpfs(query, k)
-        if resolved_mode in {"multimodal", "semantixel", "image", "video"}:
+        if resolved_mode in {"multimodal", "semantixel", "image", "video", "audio"}:
             mm_type = media_type
-            if resolved_mode in {"image", "video"}:
+            if resolved_mode in {"image", "video", "audio"}:
                 mm_type = resolved_mode
             return self._search_multimodal(query, top_k or k, threshold, mm_type)
+        if resolved_mode in {"keyword", "ocr", "transcript"}:
+            return self._search_multimodal_keywords(query, top_k or k, threshold, media_type)
         if resolved_mode in {"combined", "hybrid", "all"}:
             return self._search_combined(query, k, top_k=top_k, threshold=threshold, media_type=media_type)
         if resolved_mode == "auto":
@@ -330,6 +332,74 @@ class BackendFacade:
             "results": normalized,
             "source": "semantixel",
             "search_status": "ok",
+        }
+
+    def _search_multimodal_keywords(
+        self,
+        query: str,
+        top_k: int,
+        threshold: Optional[float],
+        media_type: str,
+    ) -> dict[str, Any]:
+        runtime = get_semantixel_runtime()
+        items = runtime.keyword_search(
+            query=query,
+            top_k=top_k,
+            threshold=threshold,
+            media_type=media_type,
+        )
+        normalized = [self._normalize_multimodal_result(item, media_type) for item in items if isinstance(item, dict)]
+        return {
+            "query": query,
+            "total": len(normalized),
+            "results": normalized,
+            "source": "semantixel",
+            "search_status": "ok",
+        }
+
+    def search_by_image(
+        self,
+        image_path: str,
+        top_k: int,
+        threshold: Optional[float],
+        media_type: str,
+    ) -> dict[str, Any]:
+        runtime = get_semantixel_runtime()
+        items = runtime.semantic_image_search(
+            image_path=image_path,
+            top_k=top_k,
+            threshold=threshold,
+            media_type=media_type,
+        )
+        normalized = [self._normalize_multimodal_result(item, media_type) for item in items if isinstance(item, dict)]
+        return {
+            "query": image_path,
+            "total": len(normalized),
+            "results": normalized,
+            "source": "semantixel",
+            "search_status": "ok",
+        }
+
+    def multimodal_graph(self) -> dict[str, Any]:
+        runtime = get_semantixel_runtime()
+        return {
+            "source": "semantixel",
+            "graph": runtime.graph_data(),
+        }
+
+    @staticmethod
+    def _normalize_multimodal_result(item: dict[str, Any], fallback_media_type: str) -> dict[str, Any]:
+        return {
+            "path": item.get("path", ""),
+            "score": float(item.get("score", 0.0) or 0.0),
+            "snippet": item.get("type", "multimodal"),
+            "is_dir": False,
+            "source": "semantixel",
+            "kind": "multimodal",
+            "media_type": item.get("type", fallback_media_type),
+            "timestamp": item.get("timestamp"),
+            "composite_id": item.get("composite_id"),
+            "media_id": item.get("media_id"),
         }
 
     def _search_combined(

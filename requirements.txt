@@ -20,6 +20,13 @@ pillow==10.4.0
 ftfy==6.3.1
 regex==2024.11.6
 
+# Audio retrieval
+librosa==0.10.2.post1
+soundfile==0.12.1
+audioread==3.0.1
+faster-whisper==1.0.3
+ctranslate2==4.4.0
+
 # Terminal UI
 prompt-toolkit==3.0.43
 rich==13.7.0

@@ -27,6 +27,15 @@ _DEFAULT_MULTIMODAL_CONFIG: dict[str, Any] = {
     "exclude_directories": [],
     "top_k_default": 5,
     "threshold_default": 0.0,
+    "audio": {
+        "enabled": True,
+        "transcription_enabled": True,
+        "clap_enabled": False,
+        "max_duration_seconds": 0,
+        "provider": "faster_whisper",
+        "faster_whisper_model": "tiny.en",
+        "transcription_max_duration": 60.0,
+    },
 }
 
 
@@ -80,6 +89,8 @@ class SemantixelRuntimeService:
 
         try:
             indexed_count = int(self.index_service.image_collection.count())
+            indexed_count += int(getattr(self.index_service, "text_collection").count())
+            indexed_count += int(getattr(self.index_service, "audio_collection").count())
         except Exception as exc:
             logger.warning("Unable to inspect multimodal index count before search: %s", exc)
             return
@@ -132,6 +143,11 @@ class SemantixelRuntimeService:
 
         sem_config.include_directories = include_dirs
         sem_config.exclude_directories = exclude_dirs
+        audio_settings = self.settings.get("audio")
+        if isinstance(audio_settings, dict):
+            for key, value in audio_settings.items():
+                if hasattr(sem_config.audio, key):
+                    setattr(sem_config.audio, key, value)
         return include_dirs, exclude_dirs
 
     def run_full_scan(self) -> dict[str, Any]:
@@ -187,6 +203,61 @@ class SemantixelRuntimeService:
             media_type=media_type,
         )
 
+    def semantic_image_search(
+        self,
+        image_path: str,
+        top_k: Optional[int] = None,
+        threshold: Optional[float] = None,
+        media_type: str = "all",
+    ) -> list[dict[str, Any]]:
+        """Search visually similar images/video frames from a reference image."""
+        if self.search_service is None:
+            raise RuntimeError("Semantixel runtime is not initialized")
+
+        self._ensure_search_index_ready()
+
+        resolved_top_k = int(top_k if top_k is not None else self.settings.get("top_k_default", 5))
+        resolved_threshold = float(
+            threshold if threshold is not None else self.settings.get("threshold_default", 0.0)
+        )
+
+        return self.search_service.semantic_image_search(
+            image_path=image_path,
+            top_k=max(1, resolved_top_k),
+            threshold=resolved_threshold,
+            media_type=media_type,
+        )
+
+    def keyword_search(
+        self,
+        query: str,
+        top_k: Optional[int] = None,
+        threshold: Optional[float] = None,
+        media_type: str = "all",
+    ) -> list[dict[str, Any]]:
+        """Search OCR text and audio transcripts using BM25 keywords."""
+        if self.search_service is None:
+            raise RuntimeError("Semantixel runtime is not initialized")
+
+        self._ensure_search_index_ready()
+
+        resolved_top_k = int(top_k if top_k is not None else self.settings.get("top_k_default", 5))
+        resolved_threshold = float(threshold if threshold is not None else 0.0)
+        return self.search_service.keyword_search(
+            query=query,
+            top_k=max(1, resolved_top_k),
+            threshold=resolved_threshold,
+            media_type=media_type,
+        )
+
+    def graph_data(self) -> dict[str, Any]:
+        """Return the CLIP similarity graph for indexed visual media."""
+        if self.search_service is None:
+            raise RuntimeError("Semantixel runtime is not initialized")
+
+        self._ensure_search_index_ready()
+        return self.search_service.generate_graph_data()
+
 
 _lock = RLock()
 _state: dict[str, Any] = {
@@ -219,6 +290,10 @@ def _load_multimodal_config() -> dict[str, Any]:
     settings["exclude_directories"] = list(mm.get("exclude_directories", settings["exclude_directories"]))
     settings["top_k_default"] = int(mm.get("top_k_default", settings["top_k_default"]))
     settings["threshold_default"] = float(mm.get("threshold_default", settings["threshold_default"]))
+    if isinstance(mm.get("audio"), dict):
+        audio_settings = dict(settings["audio"])
+        audio_settings.update(mm["audio"])
+        settings["audio"] = audio_settings
 
     return settings
 
@@ -312,6 +387,7 @@ def get_semantixel_health_snapshot() -> dict[str, Any]:
         "exclude_directories": settings.get("exclude_directories", []),
         "top_k_default": settings.get("top_k_default", 5),
         "threshold_default": settings.get("threshold_default", 0.0),
+        "audio": settings.get("audio", {}),
     }
 
 

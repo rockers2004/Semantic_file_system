@@ -1,17 +1,21 @@
 import { useState } from "react";
-import { CommandResultItem, SkippedFileItem, runCommand, searchFiles } from "../api/files";
+import { CommandResultItem, SkippedFileItem, runCommand, searchByImage, searchFiles } from "../api/files";
+import { SemanticGraph } from "./SemanticGraph";
 
 interface UnifiedInputProps {
   setSelectedFile: (path: string) => void;
 }
 
 type UnifiedStatus = "idle" | "loading" | "error" | "done";
-type SearchMode = "general" | "multimodal" | "auto" | "hybrid";
+type SearchMode = "general" | "multimodal" | "audio" | "auto" | "hybrid" | "keyword";
 type ActionPreset =
   | "auto"
   | "search"
   | "image"
   | "video"
+  | "audio"
+  | "keyword"
+  | "similar_image"
   | "create_file"
   | "create_dir"
   | "write"
@@ -27,8 +31,8 @@ type ActionPreset =
 type ActionConfig = {
   label: string;
   prefix: string;
-  route: "auto" | "command" | "search" | "multimodal";
-  mediaType?: "all" | "image" | "video";
+  route: "auto" | "command" | "search" | "multimodal" | "keyword" | "imageSearch";
+  mediaType?: "all" | "image" | "video" | "audio";
   requiresBody: boolean;
   placeholder: string;
 };
@@ -38,6 +42,9 @@ const ACTION_ORDER: ActionPreset[] = [
   "search",
   "image",
   "video",
+  "audio",
+  "keyword",
+  "similar_image",
   "create_file",
   "create_dir",
   "write",
@@ -81,6 +88,30 @@ const ACTION_PRESETS: Record<ActionPreset, ActionConfig> = {
     mediaType: "video",
     requiresBody: true,
     placeholder: "Describe the video you want to retrieve",
+  },
+  audio: {
+    label: "audio",
+    prefix: "audio",
+    route: "multimodal",
+    mediaType: "audio",
+    requiresBody: true,
+    placeholder: "Describe speech, lyrics, or sounds you want to retrieve",
+  },
+  keyword: {
+    label: "keyword",
+    prefix: "keyword",
+    route: "keyword",
+    mediaType: "all",
+    requiresBody: true,
+    placeholder: "Search exact OCR text or audio transcript words",
+  },
+  similar_image: {
+    label: "similar_image",
+    prefix: "similar_image",
+    route: "imageSearch",
+    mediaType: "all",
+    requiresBody: true,
+    placeholder: "Paste a local image path or image URL",
   },
   create_file: {
     label: "create_file",
@@ -228,6 +259,26 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
         if (data.results.length > 0 && data.results[0].path) {
           setSelectedFile(data.results[0].path);
         }
+      } else if (presetConfig.route === "keyword") {
+        const data = await searchFiles(trimmed, 10, "keyword", {
+          mediaType: presetConfig.mediaType ?? "all",
+        });
+        setMessage(getSearchMessage(data.total, "keyword", data.error));
+        setResults(data.results);
+        setSkippedFiles([]);
+        if (data.results.length > 0 && data.results[0].path) {
+          setSelectedFile(data.results[0].path);
+        }
+      } else if (presetConfig.route === "imageSearch") {
+        const data = await searchByImage(trimmed, 10, {
+          mediaType: presetConfig.mediaType ?? "all",
+        });
+        setMessage(getSearchMessage(data.total, "similar image", data.error));
+        setResults(data.results);
+        setSkippedFiles([]);
+        if (data.results.length > 0 && data.results[0].path) {
+          setSelectedFile(data.results[0].path);
+        }
       } else if (presetConfig.route === "command") {
         const data = await runCommand(composedInput);
         setMessage(data.message);
@@ -245,7 +296,9 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
           setSelectedFile(data.results[0].path);
         }
       } else {
-        const data = await searchFiles(trimmed, 10, mode);
+        const data = await searchFiles(trimmed, 10, mode, {
+          mediaType: mode === "audio" ? "audio" : "all",
+        });
         setMessage(getSearchMessage(data.total, mode, data.error));
         setResults(data.results);
         setSkippedFiles([]);
@@ -307,7 +360,7 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
                           {item.path.split(/[/\\]/).pop() || item.path}
                         </span>
                         <span className="unified-result-score">
-                          {item.media_type ? `📄 ${item.media_type}` : ""}
+                          {item.media_type ? item.media_type : ""}
                         </span>
                       </div>
                       <div className="unified-result-snippet">{item.snippet || item.path}</div>
@@ -392,11 +445,15 @@ export function UnifiedInput({ setSelectedFile }: UnifiedInputProps) {
             >
               <option value="general">Standard (Text)</option>
               <option value="multimodal">Deep AI Search (Images/Content)</option>
+              <option value="audio">Audio</option>
+              <option value="keyword">OCR/Transcript Keywords</option>
               <option value="auto">Auto-detect</option>
               <option value="hybrid">Best of both</option>
             </select>
           </div>
         </div>
+
+        <SemanticGraph setSelectedFile={setSelectedFile} />
 
       </div>
     </section>

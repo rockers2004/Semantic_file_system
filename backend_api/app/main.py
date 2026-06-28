@@ -110,6 +110,28 @@ class SearchRequest(BaseModel):
     @classmethod
     def validate_media_type(cls, value: str) -> str:
         normalized = (value or "all").strip().lower()
+        if normalized not in {"all", "image", "video", "audio"}:
+            raise ValueError("media_type must be one of: all, image, video, audio")
+        return normalized
+
+
+class ImageSearchRequest(BaseModel):
+    image_path: str
+    top_k: int = Field(default=10, ge=1, le=50)
+    media_type: str = "all"
+    threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+    @field_validator("image_path")
+    @classmethod
+    def validate_image_path(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Image path cannot be empty")
+        return value.strip()
+
+    @field_validator("media_type")
+    @classmethod
+    def validate_media_type(cls, value: str) -> str:
+        normalized = (value or "all").strip().lower()
         if normalized not in {"all", "image", "video"}:
             raise ValueError("media_type must be one of: all, image, video")
         return normalized
@@ -388,6 +410,47 @@ async def search_files(request: Request, payload: SearchRequest):
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Search failed") from exc
+
+    return SuccessResponse(
+        ok=True,
+        data=data,
+        meta=Meta(request_id=request.state.request_id),
+    )
+
+
+@app.post("/api/v1/search/image")
+async def search_by_image(request: Request, payload: ImageSearchRequest):
+    """Search visually similar indexed images/video frames from a reference image."""
+    try:
+        data = backend_facade.search_by_image(
+            image_path=payload.image_path,
+            top_k=payload.top_k,
+            threshold=payload.threshold,
+            media_type=payload.media_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Image search failed") from exc
+
+    return SuccessResponse(
+        ok=True,
+        data=data,
+        meta=Meta(request_id=request.state.request_id),
+    )
+
+
+@app.get("/api/v1/multimodal/graph")
+async def multimodal_graph(request: Request):
+    """Return semantic graph data for indexed visual media."""
+    try:
+        data = backend_facade.multimodal_graph()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Graph generation failed") from exc
 
     return SuccessResponse(
         ok=True,
