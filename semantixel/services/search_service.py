@@ -303,17 +303,22 @@ class SearchService:
 
         The mapping is::
 
-            s = 1.0 - d
+            s = 1.0 - d / 2.0
             score = clamp((s - min_s) / (max_s - min_s), 0, 1)
 
+        Notes on the ``d / 2.0`` term:
+        ChromaDB's HNSW ``cosine`` space returns ``2 * (1 - cos_sim)`` rather than
+        the conventional ``1 - cos_sim``.  Dividing by two recovers the standard
+        cosine distance so downstream range calibration works correctly.
+
         Args:
-            d: Raw cosine distance from ChromaDB (0 = identical).
+            d: Raw cosine distance from ChromaDB (HNSW ``cosine`` space).
             modality: One of ``"clip"``, ``"minilm"``, ``"clap"``.
 
         Returns:
             Normalised similarity in ``[0, 1]`` (1 = perfect match).
         """
-        s = 1.0 - d
+        s = 1.0 - d / 2.0
         r = SearchService.MODALITY_RANGES.get(modality, {"min_s": 0.0, "max_s": 1.0})
         if s <= r["min_s"]:
             return 0.0
